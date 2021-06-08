@@ -4,7 +4,7 @@ Random Forests (RFs) are one of the workhorse of modern machine learning.
 Especially, they cannot over-fit to the training set, are
 fast to train, predict fast, parallelize well and give you a reasonable model
 even without optimizing the model's default hyper-parameters.
-In other workds, it is hard to shoot yourself in the foot while
+In other words, it is hard to shoot yourself in the foot while
 training or exploiting a Random Forests model.
 In comparison, with deep neural networks
 it is very easy to shoot yourself in the foot.
