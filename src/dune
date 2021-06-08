@@ -1,0 +1,12 @@
+
+(library
+ (name orf)
+ (public_name orf)
+ (modules RFC RFR)
+ (private_modules utls)
+ (libraries batteries cpm dolog parany))
+
+; (executable
+;  (name test)
+;  (modules test)
+;  (libraries orf minicli line_oriented))
