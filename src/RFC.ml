@@ -78,13 +78,10 @@ let class_counts samples =
 let gini_impurity samples =
   let n = float (A.length samples) in
   let counts = class_counts samples in
-  let sum_pi_squares =
-    Ht.fold (fun _class_label count acc ->
-        let p_i = (float count) /. n in
-        (p_i *. p_i) +. acc
-      ) counts 0.0
-  in
-  1.0 -. sum_pi_squares
+  Ht.fold (fun _class_label count acc ->
+      let p_i = (float count) /. n in
+      (p_i *. (1.0 -. p_i)) +. acc
+    ) counts 0.0
 
 let majority_class rng samples =
   let ht = class_counts samples in
@@ -95,7 +92,7 @@ let majority_class rng samples =
       ) ht 0 in
   (* randomly draw from all those with max_count *)
   let majority_classes =
-    A.of_list
+    A.of_list 
       (Ht.fold (fun class_label count acc ->
            if count = max_count then class_label :: acc
            else acc
@@ -108,7 +105,8 @@ let grow_one_tree rng (* repro *)
     metric max_features max_samples min_node_size (* hyper params *)
     training_set (* dataset *) =
   let bootstrap, oob =
-    (* First randomization introduced by random forests *)
+    (* First randomization introduced by random forests:
+       bootstrap sampling *)
     Utls.array_bootstrap_sample_OOB rng max_samples training_set in
   let rec loop (samples: sample array) =
     (* min_node_size is a regularization parameter; it also allows to
@@ -121,10 +119,10 @@ let grow_one_tree rng (* repro *)
       let split_candidates =
         let all_candidates = collect_non_constant_features samples in
         (* randomly keep only N of them:
-           Second randomization introduced by random forests *)
+           Second randomization introduced by random forests:
+           features sampling. *)
         L.take max_features (L.shuffle ~state:rng all_candidates) in
-      (* select the (feature, threshold) pair which maximizes the
-         metric *)
+      (* select the (feature, threshold) pair which maximizes metric *)
       let candidate_splits =
         L.fold (fun acc1 (feature, values) ->
             IntSet.fold (fun value acc2 ->
