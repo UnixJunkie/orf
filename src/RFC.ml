@@ -15,7 +15,7 @@ type sample = features (* X *) *
 
 type tree = Leaf of class_label
           | Node of tree (* lhs *) *
-                    int * int (* (feature, value) *) *
+                    int * int (* (feature, threshold) *) *
                     tree (* rhs *)
 
 type metric = Shannon (* TODO *)
@@ -96,7 +96,7 @@ let majority_class rng samples =
       ) ht 0 in
   (* randomly draw from all those with max_count *)
   let majority_classes =
-    A.of_list 
+    A.of_list
       (Ht.fold (fun class_label count acc ->
            if count = max_count then class_label :: acc
            else acc
@@ -106,7 +106,7 @@ let majority_class rng samples =
 (* Formula comes from the book:
    "Hands-on machine learning with sklearn ...", A. Geron.
    It must be minimized. *)
-let cost_function metric (left, right) =
+let cost_function metric left right =
   let card_left = A.length left in
   let card_right = A.length right in
   let n = float (card_left + card_right) in
@@ -115,21 +115,28 @@ let cost_function metric (left, right) =
   ((w_left  *. (metric left)) +.
    (w_right *. (metric right)))
 
+let fst5 (a, _, _, (_, _)) = a
+
 let choose_min_cost rng cost_splits =
-  let min_cost = L.min (L.map fst cost_splits) in
+  let min_cost = L.min (L.map fst5 cost_splits) in
   let candidates =
     A.of_list
-      (L.fold (fun acc (cost, (left, right)) ->
-           if cost = min_cost then (left, right) :: acc
+      (L.fold (fun acc (cost, feature, value, (left, right)) ->
+           if cost = min_cost then
+             (cost, feature, value, (left, right)) :: acc
            else acc
          ) [] cost_splits) in
   Utls.array_rand_elt rng candidates
-  
+
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
 let grow_one_tree rng (* repro *)
-    metric max_features max_samples min_node_size (* hyper params *)
-    training_set (* dataset *) =
+    (metric: sample array -> float) (* hyper params *)
+    (max_features: int)
+    (max_samples: int)
+    (min_node_size: int)
+    (training_set: sample array) (* dataset *)
+  : tree * sample array =
   let bootstrap, oob =
     (* First randomization introduced by random forests:
        bootstrap sampling *)
@@ -152,17 +159,18 @@ let grow_one_tree rng (* repro *)
       let candidate_splits =
         L.fold (fun acc1 (feature, values) ->
             IntSet.fold (fun value acc2 ->
-                (partition_samples feature value samples) :: acc2
+                (feature, value, partition_samples feature value samples)
+                :: acc2
               ) values acc1
           ) [] split_candidates in
       let split_costs =
-        L.rev_map (fun (left, right) ->
-            let cost = cost_function metric (left, right) in
-            (cost, (left, right))
+        L.rev_map (fun (feature, value, (left, right)) ->
+            let cost = cost_function metric left right in
+            (cost, feature, value, (left, right))
           ) candidate_splits in
-      (* find min cost *)
-      
-      (* random choose one split which maximixed metric *)
-      failwith "not implemented yet"
+      (* choose one split which minimized the cost function *)
+      let _cost, feature, threshold, (left, right) =
+        choose_min_cost rng split_costs in
+      Node (loop left, feature, threshold, loop right)
   in
   (loop bootstrap, oob)
