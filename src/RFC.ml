@@ -65,14 +65,29 @@ let partition_samples (feature: int) (threshold: int) (samples: sample array) =
       value <= threshold
     ) samples
 
-(* FBR: implement Gini purity *)
-
-let majority_class rng samples =
+(* how many times we see each class label *)
+let class_counts samples =
   let ht = Ht.create 11 in
   A.iter (fun (_features, class_label) ->
       let prev_count = Ht.find_default ht class_label 0 in
       Ht.replace ht class_label (prev_count + 1)
     ) samples;
+  ht
+
+(* FBR: check this formula in a book (comes from wikipedia) *)
+let gini_impurity samples =
+  let n = float (A.length samples) in
+  let counts = class_counts samples in
+  let sum_pi_squares =
+    Ht.fold (fun _class_label count acc ->
+        let p_i = (float count) /. n in
+        (p_i *. p_i) +. acc
+      ) counts 0.0
+  in
+  1.0 -. sum_pi_squares
+
+let majority_class rng samples =
+  let ht = class_counts samples in
   (* find max count *)
   let max_count =
     Ht.fold (fun _class_label count acc ->
@@ -87,7 +102,8 @@ let majority_class rng samples =
          ) ht []) in
   Utls.array_rand_elt rng majority_classes
 
-(* maybe this is called the CART algorithm in the litterature *)
+(* maybe this is called the "Classification And Regression Tree" (CART)
+   algorithm in the litterature *)
 let grow_one_tree rng (* repro *)
     metric max_features max_samples min_node_size (* hyper params *)
     training_set (* dataset *) =
