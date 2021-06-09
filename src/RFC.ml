@@ -74,14 +74,15 @@ let class_counts samples =
     ) samples;
   ht
 
-(* FBR: check this formula in a book (comes from wikipedia) *)
 let gini_impurity samples =
   let n = float (A.length samples) in
   let counts = class_counts samples in
-  Ht.fold (fun _class_label count acc ->
-      let p_i = (float count) /. n in
-      (p_i *. (1.0 -. p_i)) +. acc
-    ) counts 0.0
+  let sum_pi_squares =
+    Ht.fold (fun _class_label count acc ->
+        let p_i = (float count) /. n in
+        (p_i *. p_i) +. acc
+      ) counts 0.0 in
+  1.0 -. sum_pi_squares
 
 let majority_class rng samples =
   let ht = class_counts samples in
