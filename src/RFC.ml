@@ -115,6 +115,16 @@ let cost_function metric (left, right) =
   ((w_left  *. (metric left)) +.
    (w_right *. (metric right)))
 
+let choose_min_cost rng cost_splits =
+  let min_cost = L.min (L.map fst cost_splits) in
+  let candidates =
+    A.of_list
+      (L.fold (fun acc (cost, (left, right)) ->
+           if cost = min_cost then (left, right) :: acc
+           else acc
+         ) [] cost_splits) in
+  Utls.array_rand_elt rng candidates
+  
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
 let grow_one_tree rng (* repro *)
@@ -145,12 +155,13 @@ let grow_one_tree rng (* repro *)
                 (partition_samples feature value samples) :: acc2
               ) values acc1
           ) [] split_candidates in
-      let split_metrics =
+      let split_costs =
         L.rev_map (fun (left, right) ->
-            (metric left right, (left, right))
+            let cost = cost_function metric (left, right) in
+            (cost, (left, right))
           ) candidate_splits in
-      (* split on that and recurse *)
-      (* find max metric *)
+      (* find min cost *)
+      
       (* random choose one split which maximixed metric *)
       failwith "not implemented yet"
   in
