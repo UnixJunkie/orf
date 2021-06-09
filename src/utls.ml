@@ -344,6 +344,7 @@ let list_really_take n l =
 
 let array_rand_elt rng a =
   let n = A.length a in
+  assert(n > 0);
   let i = BatRandom.State.int rng n in
   Array.unsafe_get a i
 
