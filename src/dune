@@ -2,9 +2,9 @@
 (library
  (name orf)
  (public_name orf)
- (modules RFC RFR)
+ (modules RFC RFR utls)
  (private_modules utls)
- (libraries batteries cpm dolog parany))
+ (libraries batteries cpm dolog parany line_oriented))
 
 ; (executable
 ;  (name test)
