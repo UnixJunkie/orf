@@ -6,10 +6,11 @@ open Printf
 
 module A = BatArray
 module Fn = Filename
-module L = BatList
-module Log = Dolog.Log
-module LO = Line_oriented
+module IS = BatSet.Int
 module IntMap = BatMap.Int
+module L = BatList
+module LO = Line_oriented
+module Log = Dolog.Log
 
 (* sparse vector of integer features *)
 type features = int IntMap.t
@@ -370,6 +371,27 @@ let array_bootstrap_sample rng nb_samples a =
       let rand = Random.State.int rng n in
       A.unsafe_get a rand
     )
+
+(* same as array_bootstrap_sample,
+   but also return the set of Out Of Bag (unused) samples *)
+let array_bootstrap_sample_OOB rng nb_samples a =
+  let n = Array.length a in
+  (* at init, all samples are OOB *)
+  let oob = ref (IS.of_list (L.range 0 `To (n - 1))) in
+  let bootstrap_a =
+    A.init nb_samples (fun _ ->
+        let rand = Random.State.int rng n in
+        oob := IS.remove rand !oob;
+        A.unsafe_get a rand
+      ) in
+  let m = IS.cardinal !oob in
+  let oob_a = A.create m bootstrap_a.(0) in
+  let i = ref 0 in
+  IS.iter (fun x ->
+      A.unsafe_set oob_a !i x;
+      incr i
+    ) !oob;
+  (bootstrap_a, oob_a)
 
 let robust_float_of_string s =
   try Scanf.sscanf s "%f" (fun x -> x)
