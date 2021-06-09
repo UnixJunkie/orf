@@ -74,6 +74,9 @@ let class_counts samples =
     ) samples;
   ht
 
+(* Formula comes from the book:
+   "Hands-on machine learning with sklearn ...", A. Geron.
+   Same formula in wikipedia. *)
 let gini_impurity samples =
   let n = float (A.length samples) in
   let counts = class_counts samples in
@@ -99,6 +102,18 @@ let majority_class rng samples =
            else acc
          ) ht []) in
   Utls.array_rand_elt rng majority_classes
+
+(* Formula comes from the book:
+   "Hands-on machine learning with sklearn ...", A. Geron.
+   It must be minimized. *)
+let cost_function metric (left, right) =
+  let card_left = A.length left in
+  let card_right = A.length right in
+  let n = float (card_left + card_right) in
+  let w_left = (float card_left) /. n in
+  let w_right = (float card_right) /. n in
+  ((w_left  *. (metric left)) +.
+   (w_right *. (metric right)))
 
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
