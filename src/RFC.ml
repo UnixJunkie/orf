@@ -1,6 +1,7 @@
 
 (* Random Forets Classifier *)
 
+module A = BatArray
 module Ht = BatHashtbl
 module IntMap = BatMap.Int
 module IntSet = BatSet.Int
@@ -40,32 +41,87 @@ let is_singleton s =
 *)
 
 (* a feature with non constant value allows to discriminate samples *)
-let collect_non_constant_features samples =
+let collect_non_constant_features (samples: sample array) =
   let feat_vals = Ht.create 11 in
-  L.iter (fun sample ->
+  A.iter (fun (features, _class_label) ->
       IntMap.iter (fun feature value ->
           try
             let prev_values = Ht.find feat_vals feature in
             Ht.replace feat_vals feature (IntSet.add value prev_values)
           with Not_found ->
             Ht.add feat_vals feature (IntSet.singleton value)
-        ) sample
+        ) features
     ) samples;
   Ht.fold (fun feat vals acc ->
       if is_singleton vals then acc
       else (feat, vals) :: acc
     ) feat_vals []
 
-(* let grow_one_tree rng (\* repro *\)
- *     metric max_features max_samples min_node_size (\* hyper params *\)
- *     training_set (\* dataset *\) =
- *   let bootstrap, oob =
- *     Utls.array_bootstrap_sample_OOB rng max_samples training_set in
- *   let rec loop samples =
- *     (\* collect all non constant features *\)
- *     (\* select the (feature, threshold) pair which maximizes the
- *        metric *\)
- *     (\* split on that and recurse *\)
- *     failwith "not implemented yet"
- *   in
- *   (loop bootstrap, oob) *)
+(* split a node *)
+let partition_samples (feature: int) (threshold: int) (samples: sample array) =
+  A.partition (fun (features, _class_label) ->
+      (* sparse representation: almost 0s everywhere *)
+      let value = IntMap.find_default 0 feature features in
+      value <= threshold
+    ) samples
+
+(* FBR: implement Gini purity *)
+
+let majority_class rng samples =
+  let ht = Ht.create 11 in
+  A.iter (fun (_features, class_label) ->
+      let prev_count = Ht.find_default ht class_label 0 in
+      Ht.replace ht class_label (prev_count + 1)
+    ) samples;
+  (* find max count *)
+  let max_count =
+    Ht.fold (fun _class_label count acc ->
+        max count acc
+      ) ht 0 in
+  (* randomly draw from all those with max_count *)
+  let majority_classes =
+    A.of_list
+      (Ht.fold (fun class_label count acc ->
+           if count = max_count then class_label :: acc
+           else acc
+         ) ht []) in
+  Utls.array_rand_elt rng majority_classes
+
+(* maybe this is called the CART algorithm in the litterature *)
+let grow_one_tree rng (* repro *)
+    metric max_features max_samples min_node_size (* hyper params *)
+    training_set (* dataset *) =
+  let bootstrap, oob =
+    (* First randomization introduced by random forests *)
+    Utls.array_bootstrap_sample_OOB rng max_samples training_set in
+  let rec loop (samples: sample array) =
+    (* min_node_size is a regularization parameter; it also allows to
+     * accelerate tree building by early stopping (maybe interesting
+     * for very large datasets) *)
+    if A.length samples <= min_node_size then
+      Leaf (majority_class rng samples)
+    else
+      (* collect all non constant features *)
+      let split_candidates =
+        let all_candidates = collect_non_constant_features samples in
+        (* randomly keep only N of them:
+           Second randomization introduced by random forests *)
+        L.take max_features (L.shuffle ~state:rng all_candidates) in
+      (* select the (feature, threshold) pair which maximizes the
+         metric *)
+      let candidate_splits =
+        L.fold (fun acc1 (feature, values) ->
+            IntSet.fold (fun value acc2 ->
+                (partition_samples feature value samples) :: acc2
+              ) values acc1
+          ) [] split_candidates in
+      let split_metrics =
+        L.rev_map (fun (left, right) ->
+            (metric left right, (left, right))
+          ) candidate_splits in
+      (* split on that and recurse *)
+      (* find max metric *)
+      (* random choose one split which maximixed metric *)
+      failwith "not implemented yet"
+  in
+  (loop bootstrap, oob)
