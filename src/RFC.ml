@@ -193,28 +193,34 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
 
 let rand_max_bound = 1073741823 (* 2^30 - 1 *)
 
+let array_parmap ncores f a init =
+  let n = A.length a in
+  let res = A.create n init in
+  let in_count = ref 0 in
+  let out_count = ref 0 in
+  Parany.run ncores
+    ~demux:(fun () ->
+        let x = a.(!in_count) in
+        incr in_count;
+        x)
+    ~work:(fun x -> f x)
+    ~mux:(fun y ->
+        res.(!out_count) <- y;
+        incr out_count);
+  res
+
 let forest_grow
     ncores rng metric ntrees max_features max_samples min_node_size train =
   (* treat the RNG as a seed stream, for reproducibility
      despite potentially out of order parallel run *)
   let seeds =
     A.init ntrees (fun _ -> BatRandom.State.int rng rand_max_bound) in
-  let forest = A.init ntrees (fun _ -> (Leaf 0, [||])) in
-  let in_count = ref 0 in
-  let out_count = ref 0 in
-  Parany.run ncores
-    ~demux:(fun () ->
-        let seed = seeds.(!in_count) in
-        incr in_count;
-        seed)
-    ~work:(fun seed ->
-        let rng' = BatRandom.State.make [|seed|] in
-        tree_grow rng' metric max_features max_samples min_node_size train)
-    ~mux:(fun (tree, oob) ->
-        forest.(!out_count) <- (tree, oob);
-        incr out_count
-      );
-  forest
+  array_parmap ncores
+    (fun seed ->
+       let rng' = BatRandom.State.make [|seed|] in
+       tree_grow rng' metric max_features max_samples min_node_size train
+    )
+    seeds (Leaf 0, [||])
 
 type int_or_float = Int of int (* exact count *)
                   | Float of float (* proportion *)
@@ -268,9 +274,10 @@ let tree_predict tree (features, _label) =
         loop rhs in
   loop tree
 
-let predict_one _ncores rng forest x =
+let predict_one ncores rng forest x =
   let pred_labels =
-    A.map (fun (tree, _oob) -> tree_predict tree x) forest in
+    array_parmap ncores
+      (fun (tree, _oob) -> tree_predict tree x) forest 0 in
   let label_counts = class_count_labels pred_labels in
   let ntrees = float (A.length forest) in
   let label_probabilities =
@@ -284,5 +291,6 @@ let predict_one _ncores rng forest x =
     ) in
   Utls.array_rand_elt rng candidates
 
-let predict_many _ncores _x =
-  failwith "not implemented yet"
+(* will scale better *)
+let predict_many rng ncores forest xs =
+  Parany.Parmap.parmap ncores (predict_one 1 rng forest) xs
