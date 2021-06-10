@@ -18,9 +18,9 @@ type tree = Leaf of class_label
                     int * int (* (feature, threshold) *) *
                     tree (* rhs *)
 
-type metric = Shannon (* TODO *)
+type metric = Gini (* default *)
+            | Shannon (* TODO *)
             | MCC (* TODO *)
-            | Gini (* default *)
 
 exception Not_singleton
 
@@ -88,6 +88,11 @@ let gini_impurity samples =
       ) counts 0.0 in
   1.0 -. sum_pi_squares
 
+let metric_of = function
+  | Gini -> gini_impurity
+  | MCC -> failwith "not implemented yet"
+  | Shannon -> failwith "not implemented yet"
+
 (* Formula comes from the book:
    "Hands-on machine learning with sklearn ...", A. Geron.
    It must be minimized. *)
@@ -136,7 +141,7 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
     (max_features: int)
     (max_samples: int)
     (min_node_size: int)
-    (training_set: sample array) (* dataset *) : tree * sample array =
+    (training_set: sample array) (* dataset *) : tree * int array =
   let bootstrap, oob =
     (* First randomization introduced by random forests:
        bootstrap sampling *)
@@ -175,3 +180,28 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
       Node (loop left, feature, threshold, loop right)
   in
   (loop bootstrap, oob)
+
+let rand_max_bound = 1073741823 (* 2^30 - 1 *)
+
+let forest_grow
+    ncores rng metric ntrees max_features max_samples min_node_size train =
+  (* treat the RNG as a seed stream, for reproducibility
+     despite potentially out of order parallel run *)
+  let seeds =
+    A.init ntrees (fun _ -> BatRandom.State.int rng rand_max_bound) in
+  let forest = A.init ntrees (fun _ -> (Leaf 0, [||])) in
+  let in_count = ref 0 in
+  let out_count = ref 0 in
+  Parany.run ncores
+    ~demux:(fun () ->
+        let seed = seeds.(!in_count) in
+        incr in_count;
+        seed)
+    ~work:(fun seed ->
+        let rng' = BatRandom.State.make [|seed|] in
+        tree_grow rng' metric max_features max_samples min_node_size train)
+    ~mux:(fun (tree, oob) ->
+        forest.(!out_count) <- (tree, oob);
+        incr out_count
+      );
+  forest
