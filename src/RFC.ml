@@ -302,7 +302,8 @@ let predict_one ncores rng forest x =
 let predict_many rng ncores forest xs =
   Parany.Parmap.parmap ncores (predict_one 1 rng forest) xs
 
-let predict_OOB _ncores forest train =
+(* FBR: parallelize this one *)
+let predict_OOB forest train =
   let card_OOB =
     A.fold_left (fun acc (_tree, oob) -> acc + (A.length oob)) 0 forest in
   let truth_preds = A.create card_OOB (0, 0) in
@@ -318,5 +319,22 @@ let predict_OOB _ncores forest train =
     ) forest;
   truth_preds
 
-let mcc _x =
-  failwith "not implemented yet"
+(* MCC for particular class of interest *)
+let mcc target_class truth_preds =
+  let tp_ = ref 0 in
+  let tn_ = ref 0 in
+  let fp_ = ref 0 in
+  let fn_ = ref 0 in
+  A.iter (fun (truth, pred) ->
+      match truth = target_class, pred = target_class with
+      | true , true  -> incr tp_
+      | false, false -> incr tn_
+      | true , false -> incr fn_
+      | false, true  -> incr fp_
+    ) truth_preds;
+  let tp = !tp_ in
+  let tn = !tn_ in
+  let fp = !fp_ in
+  let fn = !fn_ in
+  float ((tp * tn) - (fp * fn)) /.
+  sqrt (float ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)))
