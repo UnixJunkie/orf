@@ -6,6 +6,7 @@ module Ht = BatHashtbl
 module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
+module Rand = BatRandom.State
 
 open Printf
 
@@ -214,10 +215,10 @@ let forest_grow
   (* treat the RNG as a seed stream, for reproducibility
      despite potentially out of order parallel run *)
   let seeds =
-    A.init ntrees (fun _ -> BatRandom.State.int rng rand_max_bound) in
+    A.init ntrees (fun _ -> Rand.int rng rand_max_bound) in
   array_parmap ncores
     (fun seed ->
-       let rng' = BatRandom.State.make [|seed|] in
+       let rng' = Rand.make [|seed|] in
        tree_grow rng' metric max_features max_samples min_node_size train
     )
     seeds (Leaf 0, [||])
@@ -291,6 +292,31 @@ let predict_one ncores rng forest x =
     ) in
   Utls.array_rand_elt rng candidates
 
-(* will scale better *)
+(* FBR: (predicted_label, label_probability, margin) *)
+
+(* FBR: check when we really need to create a new RNG *)
+
+(* FBR: store the RNG state along with the tree? *)
+
+(* will scale better than predict_one *)
 let predict_many rng ncores forest xs =
   Parany.Parmap.parmap ncores (predict_one 1 rng forest) xs
+
+let predict_OOB _ncores forest train =
+  let card_OOB =
+    A.fold_left (fun acc (_tree, oob) -> acc + (A.length oob)) 0 forest in
+  let truth_preds = A.create card_OOB (0, 0) in
+  let i = ref 0 in
+  A.iter (fun (tree, oob) ->
+      let train_OOB = A.map (fun i -> train.(i)) oob in
+      let truths = A.map snd train_OOB in
+      let preds = A.map (tree_predict tree) train_OOB in
+      A.iter2 (fun truth pred ->
+          truth_preds.(!i) <- (truth, pred);
+          incr i
+        ) truths preds
+    ) forest;
+  truth_preds
+
+let mcc _x =
+  failwith "not implemented yet"
