@@ -42,7 +42,7 @@ let is_singleton s =
 *)
 
 (* a feature with non constant value allows to discriminate samples *)
-let collect_non_constant_features (samples: sample array) =
+let collect_non_constant_features samples =
   let feat_vals = Ht.create 11 in
   A.iter (fun (features, _class_label) ->
       IntMap.iter (fun feature value ->
@@ -59,8 +59,7 @@ let collect_non_constant_features (samples: sample array) =
     ) feat_vals []
 
 (* split a node *)
-let partition_samples
-    (feature: int) (threshold: int) (samples: sample array) =
+let partition_samples feature threshold samples =
   A.partition (fun (features, _class_label) ->
       (* sparse representation --> 0s almost everywhere *)
       let value = IntMap.find_default 0 feature features in
@@ -68,7 +67,7 @@ let partition_samples
     ) samples
 
 (* how many times we see each class label *)
-let class_counts (samples: sample array) =
+let class_counts samples =
   let ht = Ht.create 11 in
   A.iter (fun (_features, class_label) ->
       let prev_count = Ht.find_default ht class_label 0 in
@@ -101,7 +100,7 @@ let cost_function metric left right =
   ((w_left  *. (metric left)) +.
    (w_right *. (metric right)))
 
-let majority_class rng (samples: sample array) =
+let majority_class rng samples =
   let ht = class_counts samples in
   (* find max count *)
   let max_count =
@@ -138,12 +137,12 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
     (max_samples: int)
     (min_node_size: int)
     (training_set: sample array) (* dataset *) : tree * sample array =
-  let (bootstrap: sample array), (oob: sample array) =
+  let bootstrap, oob =
     (* First randomization introduced by random forests:
        bootstrap sampling *)
     (* (training_set, training_set) in *)
     Utls.array_bootstrap_sample_OOB rng max_samples training_set in
-  let rec loop (samples: sample array) =
+  let rec loop samples =
     (* min_node_size is a regularization parameter; it also allows to
      * accelerate tree building by early stopping (maybe interesting
      * for very large datasets) *)
@@ -151,15 +150,14 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
       Leaf (majority_class rng samples)
     else
       (* collect all non constant features *)
-      let split_candidates: (int * IntSet.t) list =
+      let split_candidates =
         let all_candidates = collect_non_constant_features samples in
         (* randomly keep only N of them:
            Second randomization introduced by random forests:
            random feature sampling. *)
         L.take max_features (L.shuffle ~state:rng all_candidates) in
       (* select the (feature, threshold) pair minimizing cost *)
-      let candidate_splits:
-        (int * int * (sample array * sample array)) list =
+      let candidate_splits =
         L.fold (fun acc1 (feature, values) ->
             IntSet.fold (fun value acc2 ->
                 (feature, value, partition_samples feature value samples)
