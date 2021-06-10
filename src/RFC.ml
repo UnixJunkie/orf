@@ -69,7 +69,7 @@ let partition_samples feature threshold samples =
     ) samples
 
 (* how many times we see each class label *)
-let class_counts samples =
+let class_count_samples samples =
   let ht = Ht.create 11 in
   A.iter (fun (_features, class_label) ->
       let prev_count = Ht.find_default ht class_label 0 in
@@ -77,12 +77,20 @@ let class_counts samples =
     ) samples;
   ht
 
+let class_count_labels labels =
+  let ht = Ht.create 11 in
+  A.iter (fun class_label ->
+      let prev_count = Ht.find_default ht class_label 0 in
+      Ht.replace ht class_label (prev_count + 1)
+    ) labels;
+  ht
+
 (* Formula comes from the book:
    "Hands-on machine learning with sklearn ...", A. Geron.
    Same formula in wikipedia. *)
 let gini_impurity samples =
   let n = float (A.length samples) in
-  let counts = class_counts samples in
+  let counts = class_count_samples samples in
   let sum_pi_squares =
     Ht.fold (fun _class_label count acc ->
         let p_i = (float count) /. n in
@@ -108,7 +116,7 @@ let cost_function metric left right =
    (w_right *. (metric right)))
 
 let majority_class rng samples =
-  let ht = class_counts samples in
+  let ht = class_count_samples samples in
   (* find max count *)
   let max_count =
     Ht.fold (fun _class_label count acc ->
@@ -248,5 +256,33 @@ let train (ncores: int)
     min_node_size in
   forest_grow ncores rng metric_f ntrees max_feats max_samps min_node train
 
-let predict =
+(* predict for one sample using one tree *)
+let tree_predict tree (features, _label) =
+  let rec loop = function
+    | Leaf label -> label
+    | Node (lhs, feature, threshold, rhs) ->
+      let value = IntMap.find_default 0 feature features in
+      if value <= threshold then
+        loop lhs
+      else
+        loop rhs in
+  loop tree
+
+let predict_one _ncores rng forest x =
+  let pred_labels =
+    A.map (fun (tree, _oob) -> tree_predict tree x) forest in
+  let label_counts = class_count_labels pred_labels in
+  let ntrees = float (A.length forest) in
+  let label_probabilities =
+    Ht.fold (fun label count acc ->
+        (label, (float count) /. ntrees) :: acc
+      ) label_counts [] in
+  let p_max = L.max (L.map snd label_probabilities) in
+  let candidates =
+    A.of_list (
+      L.filter (fun (_label, p) -> p = p_max) label_probabilities
+    ) in
+  Utls.array_rand_elt rng candidates
+
+let predict_many _ncores _x =
   failwith "not implemented yet"
