@@ -374,7 +374,7 @@ let array_bootstrap_sample rng nb_samples a =
     )
 
 (* same as array_bootstrap_sample,
-   but also return the set of Out Of Bag (unused) samples *)
+   but also return the set of Out Of Bag (unused) sample indexes *)
 let array_bootstrap_sample_OOB rng nb_samples a =
   let n = Array.length a in
   let flags = A.create n '0' in
@@ -385,10 +385,11 @@ let array_bootstrap_sample_OOB rng nb_samples a =
         A.unsafe_get a rand
       ) in
   let oob =
-    A.filteri (fun i _x ->
-        (A.unsafe_get flags i) = '0'
-      ) a in
-  (bootstrap, oob)
+    A.fold_righti (fun i x acc ->
+        if x = '0' then i :: acc
+        else acc
+      ) flags [] in
+  (bootstrap, A.of_list oob)
 
 let robust_float_of_string s =
   try Scanf.sscanf s "%f" (fun x -> x)
