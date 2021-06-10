@@ -395,3 +395,9 @@ let robust_float_of_string s =
   try Scanf.sscanf s "%f" (fun x -> x)
   with _exn ->
     failwith ("robust_float_of_string: cannot parse: " ^ s)
+
+(* force x to be in [mini, maxi] *)
+let bound_between mini maxi x =
+  if x < mini then mini
+  else if x > maxi then maxi
+  else x
