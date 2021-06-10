@@ -24,6 +24,7 @@ type metric = Shannon (* TODO *)
 
 exception Not_singleton
 
+(* FBR: contribute this functionality to batteries *)
 let is_singleton s =
   try
     let must_false = ref false in
@@ -58,15 +59,16 @@ let collect_non_constant_features (samples: sample array) =
     ) feat_vals []
 
 (* split a node *)
-let partition_samples (feature: int) (threshold: int) (samples: sample array) =
+let partition_samples
+    (feature: int) (threshold: int) (samples: sample array) =
   A.partition (fun (features, _class_label) ->
-      (* sparse representation: almost 0s everywhere *)
+      (* sparse representation --> 0s almost everywhere *)
       let value = IntMap.find_default 0 feature features in
       value <= threshold
     ) samples
 
 (* how many times we see each class label *)
-let class_counts samples =
+let class_counts (samples: sample array) =
   let ht = Ht.create 11 in
   A.iter (fun (_features, class_label) ->
       let prev_count = Ht.find_default ht class_label 0 in
@@ -87,7 +89,19 @@ let gini_impurity samples =
       ) counts 0.0 in
   1.0 -. sum_pi_squares
 
-let majority_class rng samples =
+(* Formula comes from the book:
+   "Hands-on machine learning with sklearn ...", A. Geron.
+   It must be minimized. *)
+let cost_function metric left right =
+  let card_left = A.length left in
+  let card_right = A.length right in
+  let n = float (card_left + card_right) in
+  let w_left = (float card_left) /. n in
+  let w_right = (float card_right) /. n in
+  ((w_left  *. (metric left)) +.
+   (w_right *. (metric right)))
+
+let majority_class rng (samples: sample array) =
   let ht = class_counts samples in
   (* find max count *)
   let max_count =
@@ -102,18 +116,6 @@ let majority_class rng samples =
            else acc
          ) ht []) in
   Utls.array_rand_elt rng majority_classes
-
-(* Formula comes from the book:
-   "Hands-on machine learning with sklearn ...", A. Geron.
-   It must be minimized. *)
-let cost_function metric left right =
-  let card_left = A.length left in
-  let card_right = A.length right in
-  let n = float (card_left + card_right) in
-  let w_left = (float card_left) /. n in
-  let w_right = (float card_right) /. n in
-  ((w_left  *. (metric left)) +.
-   (w_right *. (metric right)))
 
 let fst5 (a, _, _, (_, _)) = a
 
@@ -130,16 +132,16 @@ let choose_min_cost rng cost_splits =
 
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
-let grow_one_tree rng (* repro *)
+let tree_grow (rng: Random.State.t) (* seeded RNG *)
     (metric: sample array -> float) (* hyper params *)
     (max_features: int)
     (max_samples: int)
     (min_node_size: int)
-    (training_set: sample array) (* dataset *)
-  : tree * sample array =
-  let bootstrap, oob =
+    (training_set: sample array) (* dataset *) : tree * sample array =
+  let (bootstrap: sample array), (oob: sample array) =
     (* First randomization introduced by random forests:
        bootstrap sampling *)
+    (* (training_set, training_set) in *)
     Utls.array_bootstrap_sample_OOB rng max_samples training_set in
   let rec loop (samples: sample array) =
     (* min_node_size is a regularization parameter; it also allows to
@@ -149,14 +151,15 @@ let grow_one_tree rng (* repro *)
       Leaf (majority_class rng samples)
     else
       (* collect all non constant features *)
-      let split_candidates =
+      let split_candidates: (int * IntSet.t) list =
         let all_candidates = collect_non_constant_features samples in
         (* randomly keep only N of them:
            Second randomization introduced by random forests:
-           features sampling. *)
+           random feature sampling. *)
         L.take max_features (L.shuffle ~state:rng all_candidates) in
-      (* select the (feature, threshold) pair which maximizes metric *)
-      let candidate_splits =
+      (* select the (feature, threshold) pair minimizing cost *)
+      let candidate_splits:
+        (int * int * (sample array * sample array)) list =
         L.fold (fun acc1 (feature, values) ->
             IntSet.fold (fun value acc2 ->
                 (feature, value, partition_samples feature value samples)
@@ -168,7 +171,7 @@ let grow_one_tree rng (* repro *)
             let cost = cost_function metric left right in
             (cost, feature, value, (left, right))
           ) candidate_splits in
-      (* choose one split which minimized the cost function *)
+      (* choose one split minimizing cost *)
       let _cost, feature, threshold, (left, right) =
         choose_min_cost rng split_costs in
       Node (loop left, feature, threshold, loop right)
