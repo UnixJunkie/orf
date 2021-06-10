@@ -7,6 +7,8 @@ module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
 
+open Printf
+
 type features = int IntMap.t
 type class_label = int
 
@@ -205,3 +207,46 @@ let forest_grow
         incr out_count
       );
   forest
+
+type int_or_float = Int of int (* exact count *)
+                  | Float of float (* proportion *)
+
+type forest_oob = (tree * int array) array
+type forest = tree array
+
+let drop_OOB (x: forest_oob): forest =
+  A.map fst x
+
+let ratio_to_int mini maxi var_name x =
+  Utls.bound_between mini maxi (match x with
+      | Int i -> i
+      | Float f ->
+        let () =
+          Utls.enforce (0.0 < f && f <= 1.0)
+            (sprintf "RFC.train: %s not in ]0.0,1.0]" var_name) in
+        BatFloat.round_to_int (f *. (float maxi))
+    )
+
+let train (ncores: int)
+    (rng: Random.State.t)
+    (metric: metric)
+    (ntrees: int)
+    (max_features: int_or_float)
+    (card_features: int)
+    (max_samples: int_or_float)
+    (min_node_size: int)
+    (train: sample array): forest_oob =
+  Utls.enforce (1 <= ntrees) "RFC.train: ntrees < 1";
+  let metric_f = metric_of metric in
+  let max_feats = ratio_to_int 1 card_features "max_features" max_features in
+  let n = A.length train in
+  let max_samps = ratio_to_int 1 n "max_samples" max_samples in
+  let min_node =
+    let () =
+      Utls.enforce (1 <= min_node_size && min_node_size < n)
+        "RFC.train: min_node_size not in [1,n[" in
+    min_node_size in
+  forest_grow ncores rng metric_f ntrees max_feats max_samps min_node train
+
+let predict =
+  failwith "not implemented yet"
