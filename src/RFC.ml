@@ -53,7 +53,10 @@ let collect_non_constant_features samples =
             let prev_values = Ht.find feat_vals feature in
             Ht.replace feat_vals feature (IntSet.add value prev_values)
           with Not_found ->
-            Ht.add feat_vals feature (IntSet.singleton value)
+            Ht.add feat_vals feature
+              (* we have a sparse representation:
+                 always explicitely add the 0 value then *)
+              IntSet.(add value (singleton 0))
         ) features
     ) samples;
   Ht.fold (fun feat vals acc ->
@@ -77,6 +80,8 @@ let class_count_samples samples =
       Ht.replace ht class_label (prev_count + 1)
     ) samples;
   ht
+
+(* FBR: presort all training set by feature values for each feature *)
 
 let class_count_labels labels =
   let ht = Ht.create 11 in
@@ -120,7 +125,7 @@ let majority_class rng samples =
   if A.length samples = 0 then
     assert(false)
   else if A.length samples = 1 then
-    snd (samples.(0))
+    snd (samples.(0)) (* single label *)
   else
     let ht = class_count_samples samples in
     (* find max count *)
@@ -143,7 +148,7 @@ let choose_min_cost rng = function
   | [] -> assert(false)
   | [x] -> x
   | cost_splits ->
-    let min_cost = L.min (L.map fst5 cost_splits) in
+    let min_cost = L.min (L.rev_map fst5 cost_splits) in
     let candidates =
       A.of_list
         (L.fold (fun acc (cost, feature, value, (left, right)) ->
@@ -162,14 +167,11 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
     (min_node_size: int)
     (training_set: sample array) (* dataset *) : tree * int array =
   let bootstrap, oob =
-    (* First randomization introduced by random forests:
-       bootstrap sampling *)
-    (* (training_set, training_set) in *)
+    (* First randomization introduced by random forests: bootstrap sampling *)
     Utls.array_bootstrap_sample_OOB rng max_samples training_set in
   let rec loop (* depth *) samples =
     (* min_node_size is a regularization parameter; it also allows to
-     * accelerate tree building by early stopping (maybe interesting
-     * for very large datasets) *)
+     * abort tree building (might be interesting for very large datasets) *)
     if A.length samples <= min_node_size then
       Leaf (majority_class rng samples)
     else
@@ -177,8 +179,8 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
       let split_candidates =
         let all_candidates = collect_non_constant_features samples in
         (* randomly keep only N of them:
-           Second randomization introduced by random forests:
-           random feature sampling. *)
+           Second randomization introduced by random forests
+           (random feature sampling). *)
         L.take max_features (L.shuffle ~state:rng all_candidates) in
       match split_candidates with
       | [] -> (* cannot discriminate samples further *)
