@@ -8,5 +8,6 @@
 
 (executable
  (name test)
+ (modes byte exe)
  (modules test)
  (libraries orf minicli line_oriented))
