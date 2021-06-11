@@ -6,6 +6,7 @@ module Ht = BatHashtbl
 module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
+module Log = Dolog.Log
 module Rand = BatRandom.State
 
 open Printf
@@ -27,7 +28,6 @@ type metric = Gini (* default *)
 
 exception Not_singleton
 
-(* FBR: contribute this functionality to batteries *)
 let is_singleton s =
   try
     let must_false = ref false in
@@ -117,33 +117,41 @@ let cost_function metric left right =
    (w_right *. (metric right)))
 
 let majority_class rng samples =
-  let ht = class_count_samples samples in
-  (* find max count *)
-  let max_count =
-    Ht.fold (fun _class_label count acc ->
-        max count acc
-      ) ht 0 in
-  (* randomly draw from all those with max_count *)
-  let majority_classes =
-    A.of_list
-      (Ht.fold (fun class_label count acc ->
-           if count = max_count then class_label :: acc
-           else acc
-         ) ht []) in
-  Utls.array_rand_elt rng majority_classes
+  if A.length samples = 0 then
+    assert(false)
+  else if A.length samples = 1 then
+    snd (samples.(0))
+  else
+    let ht = class_count_samples samples in
+    (* find max count *)
+    let max_count =
+      Ht.fold (fun _class_label count acc ->
+          max count acc
+        ) ht 0 in
+    (* randomly draw from all those with max_count *)
+    let majority_classes =
+      A.of_list
+        (Ht.fold (fun class_label count acc ->
+             if count = max_count then class_label :: acc
+             else acc
+           ) ht []) in
+    Utls.array_rand_elt rng majority_classes
 
 let fst5 (a, _, _, (_, _)) = a
 
-let choose_min_cost rng cost_splits =
-  let min_cost = L.min (L.map fst5 cost_splits) in
-  let candidates =
-    A.of_list
-      (L.fold (fun acc (cost, feature, value, (left, right)) ->
-           if cost = min_cost then
-             (cost, feature, value, (left, right)) :: acc
-           else acc
-         ) [] cost_splits) in
-  Utls.array_rand_elt rng candidates
+let choose_min_cost rng = function
+  | [] -> assert(false)
+  | [x] -> x
+  | cost_splits ->
+    let min_cost = L.min (L.map fst5 cost_splits) in
+    let candidates =
+      A.of_list
+        (L.fold (fun acc (cost, feature, value, (left, right)) ->
+             if cost = min_cost then
+               (cost, feature, value, (left, right)) :: acc
+             else acc
+           ) [] cost_splits) in
+    Utls.array_rand_elt rng candidates
 
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
@@ -158,7 +166,7 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
        bootstrap sampling *)
     (* (training_set, training_set) in *)
     Utls.array_bootstrap_sample_OOB rng max_samples training_set in
-  let rec loop samples =
+  let rec loop depth samples =
     (* min_node_size is a regularization parameter; it also allows to
      * accelerate tree building by early stopping (maybe interesting
      * for very large datasets) *)
@@ -172,25 +180,38 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
            Second randomization introduced by random forests:
            random feature sampling. *)
         L.take max_features (L.shuffle ~state:rng all_candidates) in
-      (* select the (feature, threshold) pair minimizing cost *)
-      let candidate_splits =
-        L.fold (fun acc1 (feature, values) ->
-            IntSet.fold (fun value acc2 ->
-                (feature, value, partition_samples feature value samples)
-                :: acc2
-              ) values acc1
-          ) [] split_candidates in
-      let split_costs =
-        L.rev_map (fun (feature, value, (left, right)) ->
-            let cost = cost_function metric left right in
-            (cost, feature, value, (left, right))
-          ) candidate_splits in
-      (* choose one split minimizing cost *)
-      let _cost, feature, threshold, (left, right) =
-        choose_min_cost rng split_costs in
-      Node (loop left, feature, threshold, loop right)
+      match split_candidates with
+      | [] -> (* cannot discriminate samples further *)
+        Leaf (majority_class rng samples)
+      | _ ->
+        (* select the (feature, threshold) pair minimizing cost *)
+        let candidate_splits =
+          L.fold (fun acc1 (feature, values) ->
+              IntSet.fold (fun value acc2 ->
+                  (feature, value, partition_samples feature value samples)
+                  :: acc2
+                ) values acc1
+            ) [] split_candidates in
+        let split_costs =
+          L.rev_map (fun (feature, value, (left, right)) ->
+              let cost = cost_function metric left right in
+              (cost, feature, value, (left, right))
+            ) candidate_splits in
+        (* choose one split minimizing cost *)
+        let cost, feature, threshold, (left, right) =
+          choose_min_cost rng split_costs in
+        Log.debug "depth: %d feat: %d thresh: %d cost: %f"
+          depth feature threshold cost;
+        if A.length left = 0 then
+          Leaf (majority_class rng right)
+        else if A.length right = 0 then
+          Leaf (majority_class rng left)
+        else
+          let depth' = 1 + depth in
+          Node (loop depth' left, feature, threshold,
+                loop depth' right)
   in
-  (loop bootstrap, oob)
+  (loop 0 bootstrap, oob)
 
 let rand_max_bound = 1073741823 (* 2^30 - 1 *)
 
@@ -201,9 +222,12 @@ let array_parmap ncores f a init =
   let out_count = ref 0 in
   Parany.run ncores
     ~demux:(fun () ->
-        let x = a.(!in_count) in
-        incr in_count;
-        x)
+        if !in_count = n then
+          raise Parany.End_of_input
+        else
+          let x = a.(!in_count) in
+          incr in_count;
+          x)
     ~work:(fun x -> f x)
     ~mux:(fun y ->
         res.(!out_count) <- y;
