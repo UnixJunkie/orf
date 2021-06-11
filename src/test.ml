@@ -43,9 +43,11 @@ let main () =
               -np <ncores:int>" Sys.argv.(0);
       exit 0
     end;
+  Log.info "load training set";
   let train_set =
     let train_set_fn = CLI.get_string ["-tr"] args in
     load_csv_file train_set_fn in
+  Log.info "load test set";
   let test_set =
     let test_set_fn = CLI.get_string ["-te"] args in
     load_csv_file test_set_fn in
@@ -56,6 +58,7 @@ let main () =
   let min_node_size = CLI.get_int_def ["-min"] args 1 in
   CLI.finalize();
   let rng = BatRandom.State.make [|3141593|] in
+  Log.info "training...";
   let model =
     RFC.(train
            ncores
