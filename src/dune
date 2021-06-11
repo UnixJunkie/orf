@@ -6,7 +6,7 @@
  (private_modules utls)
  (libraries batteries cpm dolog parany line_oriented))
 
-; (executable
-;  (name test)
-;  (modules test)
-;  (libraries orf minicli line_oriented))
+(executable
+ (name test)
+ (modules test)
+ (libraries orf minicli line_oriented))
