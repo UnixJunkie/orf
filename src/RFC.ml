@@ -65,12 +65,40 @@ let collect_non_constant_features samples =
     ) feat_vals []
 
 (* split a node *)
+(* FBR: maybe this can be accelerated:
+ *   we need all samples sorted per feature;
+ *   we need a list of the index of remaining samples *)
 let partition_samples feature threshold samples =
   A.partition (fun (features, _class_label) ->
       (* sparse representation --> 0s almost everywhere *)
       let value = IntMap.find_default 0 feature features in
       value <= threshold
     ) samples
+
+let feat_get feat features =
+  IntMap.find_default 0 feat features
+
+(* for each (feat, threshold) pair, record the set of samples
+   (just their indexes in fact) which have feat_val <= threshold *)
+    (* FBR: need to put this one into use now *)
+let index_samples samples =
+  let all_sample_indexes = (* [0..n-1] *)
+    let n = A.length samples in
+    IntSet.of_array (A.init n (fun i -> i)) in
+  let feat_vals = collect_non_constant_features samples in
+  L.fold_left (fun acc1 (feature, values) ->
+      IntMap.add feature
+        (IntSet.fold (fun threshold (acc2, rem_samples) ->
+             let left, right =
+               IntSet.partition (fun i ->
+                   let features = fst samples.(i) in
+                   let value = feat_get feature features in
+                   value <= threshold
+                 ) rem_samples in
+             (IntMap.add threshold left acc2, right)
+           ) values (IntMap.empty, all_sample_indexes)
+        ) acc1
+    ) IntMap.empty feat_vals
 
 (* how many times we see each class label *)
 let class_count_samples samples =
@@ -217,6 +245,7 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
 
 let rand_max_bound = 1073741823 (* 2^30 - 1 *)
 
+(* FBR: this should go into parany *)
 let array_parmap ncores f a init =
   let n = A.length a in
   let res = A.create n init in
@@ -277,6 +306,9 @@ let train (ncores: int)
     (max_samples: int_or_float)
     (min_node_size: int)
     (train: sample array): forest_oob =
+  Log.info "indexing";
+  let _idx = index_samples train in
+  Log.info "done";
   Utls.enforce (1 <= ntrees) "RFC.train: ntrees < 1";
   let metric_f = metric_of metric in
   let max_feats = ratio_to_int 1 card_features "max_features" max_features in
