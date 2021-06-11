@@ -166,7 +166,7 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
        bootstrap sampling *)
     (* (training_set, training_set) in *)
     Utls.array_bootstrap_sample_OOB rng max_samples training_set in
-  let rec loop depth samples =
+  let rec loop (* depth *) samples =
     (* min_node_size is a regularization parameter; it also allows to
      * accelerate tree building by early stopping (maybe interesting
      * for very large datasets) *)
@@ -198,20 +198,20 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
               (cost, feature, value, (left, right))
             ) candidate_splits in
         (* choose one split minimizing cost *)
-        let cost, feature, threshold, (left, right) =
+        let _cost, feature, threshold, (left, right) =
           choose_min_cost rng split_costs in
-        Log.debug "depth: %d feat: %d thresh: %d cost: %f"
-          depth feature threshold cost;
+        (* Log.debug "depth: %d feat: %d thresh: %d cost: %f"
+         *   depth feature threshold cost; *)
         if A.length left = 0 then
           Leaf (majority_class rng right)
         else if A.length right = 0 then
           Leaf (majority_class rng left)
         else
-          let depth' = 1 + depth in
-          Node (loop depth' left, feature, threshold,
-                loop depth' right)
+          (* let depth' = 1 + depth in *)
+          Node (loop (* depth' *) left, feature, threshold,
+                loop (* depth' *) right)
   in
-  (loop 0 bootstrap, oob)
+  (loop (* 0 *) bootstrap, oob)
 
 let rand_max_bound = 1073741823 (* 2^30 - 1 *)
 
@@ -324,7 +324,7 @@ let predict_one ncores rng forest x =
 
 (* will scale better than predict_one *)
 let predict_many rng ncores forest xs =
-  Parany.Parmap.parmap ncores (predict_one 1 rng forest) xs
+  array_parmap ncores (predict_one 1 rng forest) xs (0, 0.0)
 
 (* FBR: parallelize this one *)
 let predict_OOB forest train =
