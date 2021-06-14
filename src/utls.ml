@@ -391,6 +391,23 @@ let array_bootstrap_sample_OOB rng nb_samples a =
       ) flags [] in
   (bootstrap, A.of_list oob)
 
+(* only return bootstrap and OOB element _indexes_ *)
+let array_bootstrapi_sample_OOB rng nb_samples a =
+  let n = Array.length a in
+  let flags = A.create n '0' in
+  let bootstrap =
+    A.init nb_samples (fun _ ->
+        let rand = Random.State.int rng n in
+        A.unsafe_set flags rand '1';
+        rand
+      ) in
+  let oob =
+    A.fold_righti (fun i x acc ->
+        if x = '0' then i :: acc
+        else acc
+      ) flags [] in
+  (bootstrap, A.of_list oob)
+
 let robust_float_of_string s =
   try Scanf.sscanf s "%f" (fun x -> x)
   with _exn ->
