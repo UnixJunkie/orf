@@ -75,12 +75,18 @@ let partition_samples feature threshold samples =
       value <= threshold
     ) samples
 
+let partition_samples_index index feature threshold sample_indexes =
+  (* set of sample indexes with feat's val <= threshold *)
+  let le_set = IntMap.find threshold (IntMap.find feature index) in
+  A.partition (fun i ->
+      IntSet.mem i le_set
+    ) sample_indexes
+
 let feat_get feat features =
   IntMap.find_default 0 feat features
 
 (* for each (feat, threshold) pair, record the set of samples
    (just their indexes in fact) which have feat_val <= threshold *)
-    (* FBR: need to put this one into use now *)
 let index_samples samples =
   let all_sample_indexes = (* [0..n-1] *)
     let n = A.length samples in
@@ -88,15 +94,20 @@ let index_samples samples =
   let feat_vals = collect_non_constant_features samples in
   L.fold_left (fun acc1 (feature, values) ->
       IntMap.add feature
-        (IntSet.fold (fun threshold (acc2, rem_samples) ->
-             let left, right =
-               IntSet.partition (fun i ->
-                   let features = fst samples.(i) in
-                   let value = feat_get feature features in
-                   value <= threshold
-                 ) rem_samples in
-             (IntMap.add threshold left acc2, right)
-           ) values (IntMap.empty, all_sample_indexes)
+        (fst
+           (IntSet.fold (fun threshold (acc2, rem_samples) ->
+                let left, right =
+                  IntSet.partition (fun i ->
+                      let features = fst samples.(i) in
+                      let value = feat_get feature features in
+                      value <= threshold
+                    ) rem_samples in
+                (* Log.info "feat: %d val: %d left: %d right: %d"
+                 *   feature threshold
+                 *   (IntSet.cardinal left) (IntSet.cardinal right); *)
+                (IntMap.add threshold left acc2, right)
+              ) values (IntMap.empty, all_sample_indexes)
+           )
         ) acc1
     ) IntMap.empty feat_vals
 
@@ -108,8 +119,6 @@ let class_count_samples samples =
       Ht.replace ht class_label (prev_count + 1)
     ) samples;
   ht
-
-(* FBR: presort all training set by feature values for each feature *)
 
 let class_count_labels labels =
   let ht = Ht.create 11 in
@@ -243,6 +252,66 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
   in
   (loop (* 0 *) bootstrap, oob)
 
+(* array of all samples whose index is listed *)
+let extract indexes samples =
+  let n = A.length indexes in
+  A.init n (fun i ->
+      A.unsafe_get samples i
+    )
+
+(* FBR: I suspect the resulting tree always return pred_label = 1 *)
+let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
+    (metric: sample array -> float) (* hyper params *)
+    (max_features: int)
+    (max_samples: int)
+    (min_node_size: int)
+    index
+    (training_set: sample array) (* dataset *) : tree * int array =
+  let bootstrapi, oob =
+    Utls.array_bootstrapi_sample_OOB rng max_samples training_set in
+  let rec loop sample_indexes =
+    let samples = extract sample_indexes training_set in
+    if A.length samples <= min_node_size then
+      Leaf (majority_class rng samples)
+    else
+      let split_candidates =
+        let all_candidates = collect_non_constant_features samples in
+        L.take max_features (L.shuffle ~state:rng all_candidates) in
+      match split_candidates with
+      | [] -> Leaf (majority_class rng samples)
+      | _ ->
+        let candidate_splits =
+          L.fold (fun acc1 (feature, values) ->
+              IntSet.fold (fun value acc2 ->
+                  (feature, value,
+                   partition_samples_index
+                     index feature value sample_indexes)
+                  :: acc2
+                ) values acc1
+            ) [] split_candidates in
+        let split_costs =
+          L.rev_map (fun (feature, value, (left', right')) ->
+              let left = extract left' training_set in
+              let right = extract right' training_set in
+              let cost = cost_function metric left right in
+              (cost, feature, value, (left', right'))
+            ) candidate_splits in
+        let _cost, feature, threshold, (left', right') =
+          choose_min_cost rng split_costs in
+        (* Log.debug "feat: %d thresh: %d cost: %f"
+         *   feature threshold cost; *)
+        if A.length left' = 0 then
+          let right = extract right' training_set in
+          Leaf (majority_class rng right)
+        else if A.length right' = 0 then
+          let left = extract left' training_set in
+          Leaf (majority_class rng left)
+        else
+          Node (loop left', feature, threshold,
+                loop right')
+  in
+  (loop bootstrapi, oob)
+
 let rand_max_bound = 1073741823 (* 2^30 - 1 *)
 
 (* FBR: this should go into parany *)
@@ -266,17 +335,28 @@ let array_parmap ncores f a init =
   res
 
 let forest_grow
-    ncores rng metric ntrees max_features max_samples min_node_size train =
+    ncores rng metric ntrees max_features max_samples min_node_size
+    index train =
   (* treat the RNG as a seed stream, for reproducibility
      despite potentially out of order parallel run *)
   let seeds =
     A.init ntrees (fun _ -> Rand.int rng rand_max_bound) in
-  array_parmap ncores
-    (fun seed ->
-       let rng' = Rand.make [|seed|] in
-       tree_grow rng' metric max_features max_samples min_node_size train
-    )
-    seeds (Leaf 0, [||])
+  match index with
+  | None ->
+    array_parmap ncores
+      (fun seed ->
+         let rng' = Rand.make [|seed|] in
+         tree_grow rng' metric max_features max_samples min_node_size train
+      )
+      seeds (Leaf 0, [||])
+  | Some idx ->
+    array_parmap ncores
+      (fun seed ->
+         let rng' = Rand.make [|seed|] in
+         tree_grow_indexed rng' metric max_features max_samples min_node_size
+           idx train
+      )
+      seeds (Leaf 0, [||])
 
 type int_or_float = Int of int (* exact count *)
                   | Float of float (* proportion *)
@@ -299,6 +379,7 @@ let ratio_to_int mini maxi var_name x =
 
 let train (ncores: int)
     (rng: Random.State.t)
+    (indexing: bool)
     (metric: metric)
     (ntrees: int)
     (max_features: int_or_float)
@@ -306,9 +387,6 @@ let train (ncores: int)
     (max_samples: int_or_float)
     (min_node_size: int)
     (train: sample array): forest_oob =
-  Log.info "indexing";
-  let _idx = index_samples train in
-  Log.info "done";
   Utls.enforce (1 <= ntrees) "RFC.train: ntrees < 1";
   let metric_f = metric_of metric in
   let max_feats = ratio_to_int 1 card_features "max_features" max_features in
@@ -319,7 +397,15 @@ let train (ncores: int)
       Utls.enforce (1 <= min_node_size && min_node_size < n)
         "RFC.train: min_node_size not in [1,n[" in
     min_node_size in
-  forest_grow ncores rng metric_f ntrees max_feats max_samps min_node train
+  let index =
+    if indexing then
+      let dt, index = Utls.time_it (fun () -> index_samples train) in
+      let () = Log.info "indexing(s): %.2f" dt in
+      Some index
+    else
+      None in
+  forest_grow
+    ncores rng metric_f ntrees max_feats max_samps min_node index train
 
 (* predict for one sample using one tree *)
 let tree_predict tree (features, _label) =
@@ -394,5 +480,15 @@ let mcc target_class truth_preds =
   let tn = !tn_ in
   let fp = !fp_ in
   let fn = !fn_ in
+  Log.info "TP: %d TN: %d FP: %d FN: %d" tp tn fp fn;
   float ((tp * tn) - (fp * fn)) /.
   sqrt (float ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)))
+
+let accuracy truth_preds =
+  let n = A.length truth_preds in
+  let correct_preds = ref 0 in
+  A.iter (fun (truth, pred) ->
+      if truth = pred then incr correct_preds
+    ) truth_preds;
+  (float !correct_preds) /. (float n)
+  
