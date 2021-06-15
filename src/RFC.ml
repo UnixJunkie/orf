@@ -76,7 +76,7 @@ let partition_samples feature threshold samples =
     ) samples
 
 let partition_samples_index index feature threshold sample_indexes =
-  (* set of sample indexes with feat's val <= threshold *)
+  (* sample indexes with feat's val <= threshold *)
   let le_set = IntMap.find threshold (IntMap.find feature index) in
   A.partition (fun i ->
       IntSet.mem i le_set
@@ -177,9 +177,10 @@ let majority_class rng samples =
              if count = max_count then class_label :: acc
              else acc
            ) ht []) in
-    let chosen = Utls.array_rand_elt rng majority_classes in
-    Log.info "majority: %d" chosen;
-    chosen
+    (* let chosen = Utls.array_rand_elt rng majority_classes in
+     * Log.info "majority: %d" chosen;
+     * chosen *)
+    Utls.array_rand_elt rng majority_classes
 
 let fst5 (a, _, _, (_, _)) = a
 
@@ -239,27 +240,24 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
               (cost, feature, value, (left, right))
             ) candidate_splits in
         (* choose one split minimizing cost *)
-        let _cost, feature, threshold, (left, right) =
+        let cost, feature, threshold, (left, right) =
           choose_min_cost rng split_costs in
-        (* Log.debug "depth: %d feat: %d thresh: %d cost: %f"
-         *   depth feature threshold cost; *)
         if A.length left = 0 then
           Leaf (majority_class rng right)
         else if A.length right = 0 then
           Leaf (majority_class rng left)
+        else if cost = 0.0 then
+          (* if the cost is minimal: pure nodes -> stop digging *)
+          Node (Leaf (majority_class rng left), feature, threshold,
+                Leaf (majority_class rng right))
         else
-          (* let depth' = 1 + depth in *)
-          Node (loop (* depth' *) left, feature, threshold,
-                loop (* depth' *) right)
+          Node (loop left, feature, threshold, loop right)
   in
   (loop (* 0 *) bootstrap, oob)
 
 (* array of all samples whose index is listed *)
-let extract indexes samples =
-  let n = A.length indexes in
-  A.init n (fun i ->
-      A.unsafe_get samples i
-    )
+let extract indexes (samples: sample array): sample array =
+  A.map (A.unsafe_get samples) indexes
 
 let class_proportions prfx samples =
   let label2count = class_count_samples samples in
@@ -268,7 +266,10 @@ let class_proportions prfx samples =
       Log.info "%s p(%d)=%.2f" prfx label ((float count) /. total)
     ) label2count
 
-(* FBR: I suspect the resulting tree always return pred_label = 1 *)
+let ht_equal ht1 ht2 =
+  (L.sort compare (Ht.bindings ht1)) = (L.sort compare (Ht.bindings ht2))
+
+(* FBR: BUGGED *)
 let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
     (metric: sample array -> float) (* hyper params *)
     (max_features: int)
@@ -280,7 +281,6 @@ let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
     Utls.array_bootstrapi_sample_OOB rng max_samples training_set in
   let rec loop sample_indexes =
     let samples = extract sample_indexes training_set in
-    (* class_proportions "samples" samples; *)
     if A.length samples <= min_node_size then
       Leaf (majority_class rng samples)
     else
@@ -295,8 +295,7 @@ let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
               IntSet.fold (fun value acc2 ->
                   (feature, value,
                    partition_samples_index
-                     index feature value sample_indexes)
-                  :: acc2
+                     index feature value sample_indexes) :: acc2
                 ) values acc1
             ) [] split_candidates in
         let split_costs =
@@ -304,25 +303,28 @@ let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
               let left = extract left' training_set in
               let right = extract right' training_set in
               let cost = cost_function metric left right in
-              (* Log.debug "feat: %d thresh: %d cost: %f |L|=%d |R|=%d"
-               *   feature value cost (A.length left') (A.length right'); *)
               (cost, feature, value, (left', right'))
             ) candidate_splits in
         let cost, feature, threshold, (left', right') =
           choose_min_cost rng split_costs in
-        Log.debug "CHOSEN feat: %d thresh: %d cost: %f |L|=%d |R|=%d"
-          feature threshold cost (A.length left') (A.length right');
-        let left = extract left' training_set in
-        let right = extract right' training_set in
-        class_proportions "left" left;
-        class_proportions "right" right;
-        if A.length left' = 0 then
-          Leaf (majority_class rng right)
-        else if A.length right' = 0 then
-          Leaf (majority_class rng left)
-        else
-          Node (loop left', feature, threshold,
-                loop right')
+        begin match (A.length left', A.length right') with
+          | (0, 0) -> assert(false)
+          | (0, _) -> (* empty left *)
+            let right = extract right' training_set in
+            Leaf (majority_class rng right)
+          | (_, 0) -> (* empty right *)
+            let left = extract left' training_set in
+            Leaf (majority_class rng left)
+          | _ ->
+            if cost = 0.0 then
+              (* if the cost is minimal: pure nodes -> stop digging *)
+              let left = extract left' training_set in
+              let right = extract right' training_set in
+              Node (Leaf (majority_class rng left), feature, threshold,
+                    Leaf (majority_class rng right))
+            else
+              Node (loop left', feature, threshold, loop right')
+        end
   in
   (loop bootstrapi, oob)
 
