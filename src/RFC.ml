@@ -177,7 +177,9 @@ let majority_class rng samples =
              if count = max_count then class_label :: acc
              else acc
            ) ht []) in
-    Utls.array_rand_elt rng majority_classes
+    let chosen = Utls.array_rand_elt rng majority_classes in
+    Log.info "majority: %d" chosen;
+    chosen
 
 let fst5 (a, _, _, (_, _)) = a
 
@@ -259,6 +261,13 @@ let extract indexes samples =
       A.unsafe_get samples i
     )
 
+let class_proportions prfx samples =
+  let label2count = class_count_samples samples in
+  let total = float (L.sum (L.rev_map snd (Ht.bindings label2count))) in
+  Ht.iter (fun label count ->
+      Log.info "%s p(%d)=%.2f" prfx label ((float count) /. total)
+    ) label2count
+
 (* FBR: I suspect the resulting tree always return pred_label = 1 *)
 let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
     (metric: sample array -> float) (* hyper params *)
@@ -271,6 +280,7 @@ let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
     Utls.array_bootstrapi_sample_OOB rng max_samples training_set in
   let rec loop sample_indexes =
     let samples = extract sample_indexes training_set in
+    (* class_proportions "samples" samples; *)
     if A.length samples <= min_node_size then
       Leaf (majority_class rng samples)
     else
@@ -294,17 +304,21 @@ let tree_grow_indexed (rng: Random.State.t) (* seeded RNG *)
               let left = extract left' training_set in
               let right = extract right' training_set in
               let cost = cost_function metric left right in
+              (* Log.debug "feat: %d thresh: %d cost: %f |L|=%d |R|=%d"
+               *   feature value cost (A.length left') (A.length right'); *)
               (cost, feature, value, (left', right'))
             ) candidate_splits in
-        let _cost, feature, threshold, (left', right') =
+        let cost, feature, threshold, (left', right') =
           choose_min_cost rng split_costs in
-        (* Log.debug "feat: %d thresh: %d cost: %f"
-         *   feature threshold cost; *)
+        Log.debug "CHOSEN feat: %d thresh: %d cost: %f |L|=%d |R|=%d"
+          feature threshold cost (A.length left') (A.length right');
+        let left = extract left' training_set in
+        let right = extract right' training_set in
+        class_proportions "left" left;
+        class_proportions "right" right;
         if A.length left' = 0 then
-          let right = extract right' training_set in
           Leaf (majority_class rng right)
         else if A.length right' = 0 then
-          let left = extract left' training_set in
           Leaf (majority_class rng left)
         else
           Node (loop left', feature, threshold,
