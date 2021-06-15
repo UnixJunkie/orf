@@ -361,11 +361,12 @@ let forest_grow
 type int_or_float = Int of int (* exact count *)
                   | Float of float (* proportion *)
 
-type forest_oob = (tree * int array) array
-type forest = tree array
+type forest = (tree * int array) array
 
-let drop_OOB (x: forest_oob): forest =
-  A.map fst x
+(* before saving a model, we might want to just get rid of the OOB
+ * sample indexes *)
+let drop_OOB (f: forest): forest =
+  A.map (fun (t, _oob) -> (t, [||])) f
 
 let ratio_to_int mini maxi var_name x =
   Utls.bound_between mini maxi (match x with
@@ -386,7 +387,7 @@ let train (ncores: int)
     (card_features: int)
     (max_samples: int_or_float)
     (min_node_size: int)
-    (train: sample array): forest_oob =
+    (train: sample array): forest =
   Utls.enforce (1 <= ntrees) "RFC.train: ntrees < 1";
   let metric_f = metric_of metric in
   let max_feats = ratio_to_int 1 card_features "max_features" max_features in
