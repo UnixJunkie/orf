@@ -75,7 +75,8 @@ let main () =
   let oob_preds = RFC.predict_OOB model train_set in
   let oob_mcc = RFC.mcc 1 oob_preds in
   let oob_acy = RFC.accuracy oob_preds in
-  let preds = RFC.predict_many rng ncores model test_set in
+  let rng_backup = Random.State.copy rng in
+  let preds = RFC.predict_many ncores rng model test_set in
   let test_true_labels = A.map snd test_set in
   let test_pred_labels = A.map fst preds in
   let test_preds =
@@ -85,6 +86,12 @@ let main () =
   Log.info "OOB MCC: %f test MCC: %f" oob_mcc test_mcc;
   Log.info "OOB Acc: %f test Acc: %f" oob_acy test_acy;
   let test_auc = RFC.roc_auc 1 preds test_true_labels in
-  Log.info "test AUC: %.3f" test_auc
+  Log.info "test AUC: %.3f" test_auc;
+  let model_fn = Filename.temp_file "" "" in
+  RFC.save model_fn model;
+  Log.info "model saved to %s" model_fn;
+  let model2 = RFC.restore model_fn in
+  let preds2 = RFC.predict_many ncores rng_backup model2 test_set in
+  assert(preds = preds2)
 
 let () = main ()
