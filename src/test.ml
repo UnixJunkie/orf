@@ -83,6 +83,8 @@ let main () =
   let test_mcc = RFC.mcc 1 test_preds in
   let test_acy = RFC.accuracy test_preds in
   Log.info "OOB MCC: %f test MCC: %f" oob_mcc test_mcc;
-  Log.info "OOB Acc: %f test Acc: %f" oob_acy test_acy
+  Log.info "OOB Acc: %f test Acc: %f" oob_acy test_acy;
+  let test_auc = RFC.roc_auc 1 preds test_true_labels in
+  Log.info "test AUC: %.3f" test_auc
 
 let () = main ()

@@ -529,3 +529,21 @@ let accuracy truth_preds =
       if truth = pred then incr correct_preds
     ) truth_preds;
   (float !correct_preds) /. (float n)
+
+module Score_label = struct
+  type t = float * bool
+  let get_score (s, _l) = s
+  let get_label (_s, l) = l
+end
+
+module ROC = Cpm.MakeROC.Make(Score_label)
+
+let roc_auc target_class preds true_labels =
+  let score_labels =
+    A.map2 (fun (pred_label, pred_proba) true_label ->
+        if pred_label = target_class then
+          (pred_proba, true_label = target_class)
+        else
+          (1.0 -. pred_proba, true_label = target_class)
+      ) preds true_labels in
+  ROC.auc_a score_labels
