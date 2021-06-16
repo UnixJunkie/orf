@@ -17,9 +17,9 @@ type forest
 type int_or_float = Int of int (* exact count *)
                   | Float of float (* proportion *)
 
-(** [train ncores rng indexing metric ntrees max_features card_features
+(** [train ncores rng metric ntrees max_features card_features
            max_samples min_node_size training_set] *)
-val train: int -> Random.State.t -> bool -> metric -> int ->
+val train: int -> Random.State.t -> metric -> int ->
   int_or_float -> int -> int_or_float -> int -> sample array -> forest
 
 (** [(pred_label, pred_proba) =
