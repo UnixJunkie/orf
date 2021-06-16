@@ -436,22 +436,43 @@ let tree_predict tree (features, _label) =
         loop rhs in
   loop tree
 
-let predict_one ncores rng forest x =
+(* label to predicted probability hash table *)
+let predict_one_proba ncores forest x =
   let pred_labels =
     array_parmap ncores
       (fun (tree, _oob) -> tree_predict tree x) forest 0 in
   let label_counts = class_count_labels pred_labels in
   let ntrees = float (A.length forest) in
-  let label_probabilities =
-    Ht.fold (fun label count acc ->
-        (label, (float count) /. ntrees) :: acc
-      ) label_counts [] in
-  let p_max = L.max (L.map snd label_probabilities) in
+  Ht.fold (fun label count acc ->
+      (label, (float count) /. ntrees) :: acc
+    ) label_counts []
+
+let predict_one ncores rng forest x =
+  let label_probabilities = predict_one_proba ncores forest x in
+  let p_max = L.max (L.rev_map snd label_probabilities) in
   let candidates =
     A.of_list (
       L.filter (fun (_label, p) -> p = p_max) label_probabilities
     ) in
   Utls.array_rand_elt rng candidates
+
+let predict_one_margin ncores rng forest x =
+  let label_probabilities = predict_one_proba ncores forest x in
+  let p_max = L.max (L.rev_map snd label_probabilities) in
+  let candidates =
+    A.of_list (
+      L.filter (fun (_label, p) -> p = p_max) label_probabilities
+    ) in
+  let pred_label, pred_proba = Utls.array_rand_elt rng candidates in
+  let other_label_p_max =
+    A.fold_left (fun acc (label, p) ->
+        if label <> pred_label then
+          max acc p
+        else
+          acc
+      ) 0.0 candidates in
+  let margin = pred_proba -. other_label_p_max in
+  (pred_label, pred_proba, margin)
 
 (* FBR: (predicted_label, label_probability, margin) *)
 
@@ -508,4 +529,3 @@ let accuracy truth_preds =
       if truth = pred then incr correct_preds
     ) truth_preds;
   (float !correct_preds) /. (float n)
-  
