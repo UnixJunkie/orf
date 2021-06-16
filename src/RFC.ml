@@ -259,14 +259,14 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
 let extract indexes (samples: sample array): sample array =
   A.map (A.unsafe_get samples) indexes
 
-let class_proportions prfx samples =
+let _class_proportions prfx samples =
   let label2count = class_count_samples samples in
   let total = float (L.sum (L.rev_map snd (Ht.bindings label2count))) in
   Ht.iter (fun label count ->
       Log.info "%s p(%d)=%.2f" prfx label ((float count) /. total)
     ) label2count
 
-let ht_equal ht1 ht2 =
+let _ht_equal ht1 ht2 =
   (L.sort compare (Ht.bindings ht1)) = (L.sort compare (Ht.bindings ht2))
 
 (* FBR: BUGGED *)
@@ -481,8 +481,11 @@ let predict_one_margin ncores rng forest x =
 (* FBR: store the RNG state along with the tree? *)
 
 (* will scale better than predict_one *)
-let predict_many rng ncores forest xs =
+let predict_many ncores rng forest xs =
   array_parmap ncores (predict_one 1 rng forest) xs (0, 0.0)
+
+let predict_many_margin ncores rng forest xs =
+  array_parmap ncores (predict_one_margin 1 rng forest) xs (0, 0.0, 0.0)
 
 (* FBR: parallelize this one *)
 let predict_OOB forest train =
@@ -491,7 +494,7 @@ let predict_OOB forest train =
   let truth_preds = A.create card_OOB (0, 0) in
   let i = ref 0 in
   A.iter (fun (tree, oob) ->
-      let train_OOB = A.map (fun i -> train.(i)) oob in
+      let train_OOB = extract oob train in
       let truths = A.map snd train_OOB in
       let preds = A.map (tree_predict tree) train_OOB in
       A.iter2 (fun truth pred ->
@@ -547,3 +550,11 @@ let roc_auc target_class preds true_labels =
           (1.0 -. pred_proba, true_label = target_class)
       ) preds true_labels in
   ROC.auc_a score_labels
+
+type filename = string
+
+let save fn forest =
+  Utls.save fn forest
+
+let restore fn =
+  Utls.restore fn
