@@ -1,3 +1,7 @@
+(* Copyright (C) 2021, Francois Berenger
+
+   Tsuda laboratory, Tokyo university,
+   5-1-5 Kashiwa-no-ha, Kashiwa-shi, Chiba-ken, 277-8561, Japan. *)
 
 (* Random Forets Classifier *)
 
@@ -487,7 +491,6 @@ let predict_many ncores rng forest xs =
 let predict_many_margin ncores rng forest xs =
   array_parmap ncores (predict_one_margin 1 rng forest) xs (0, 0.0, 0.0)
 
-(* FBR: parallelize this one *)
 let predict_OOB forest train =
   let card_OOB =
     A.fold_left (fun acc (_tree, oob) -> acc + (A.length oob)) 0 forest in
