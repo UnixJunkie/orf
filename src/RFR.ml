@@ -6,7 +6,6 @@
 (* Random Forests Regressor *)
 
 module A = BatArray
-module Ht = BatHashtbl
 module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
@@ -160,131 +159,47 @@ let train (ncores: int)
   forest_grow
     ncores rng metric_f ntrees max_feats max_samps min_node train
 
-(* (\* predict for one sample using one tree *\)
- * let tree_predict tree (features, _label) =
- *   let rec loop = function
- *     | Leaf label -> label
- *     | Node (lhs, feature, threshold, rhs) ->
- *       let value = IntMap.find_default 0 feature features in
- *       if value <= threshold then
- *         loop lhs
- *       else
- *         loop rhs in
- *   loop tree
- * 
- * (\* label to predicted probability hash table *\)
- * let predict_one_proba ncores forest x =
- *   let pred_labels =
- *     array_parmap ncores
- *       (fun (tree, _oob) -> tree_predict tree x) forest 0 in
- *   let label_counts = class_count_labels pred_labels in
- *   let ntrees = float (A.length forest) in
- *   Ht.fold (fun label count acc ->
- *       (label, (float count) /. ntrees) :: acc
- *     ) label_counts []
- * 
- * let predict_one ncores rng forest x =
- *   let label_probabilities = predict_one_proba ncores forest x in
- *   let p_max = L.max (L.rev_map snd label_probabilities) in
- *   let candidates =
- *     A.of_list (
- *       L.filter (fun (_label, p) -> p = p_max) label_probabilities
- *     ) in
- *   Utls.array_rand_elt rng candidates
- * 
- * let predict_one_margin ncores rng forest x =
- *   let label_probabilities = predict_one_proba ncores forest x in
- *   let p_max = L.max (L.rev_map snd label_probabilities) in
- *   let candidates =
- *     A.of_list (
- *       L.filter (fun (_label, p) -> p = p_max) label_probabilities
- *     ) in
- *   let pred_label, pred_proba = Utls.array_rand_elt rng candidates in
- *   let other_label_p_max =
- *     A.fold_left (fun acc (label, p) ->
- *         if label <> pred_label then
- *           max acc p
- *         else
- *           acc
- *       ) 0.0 candidates in
- *   let margin = pred_proba -. other_label_p_max in
- *   (pred_label, pred_proba, margin) *)
+(* predict for one sample using one tree *)
+let tree_predict tree (features, _dep_var) =
+  let rec loop = function
+    | Leaf dep_var -> dep_var
+    | Node (lhs, feature, threshold, rhs) ->
+      let value = IntMap.find_default 0 feature features in
+      if value <= threshold then
+        loop lhs
+      else
+        loop rhs in
+  loop tree
 
-(* FBR: (predicted_label, label_probability, margin) *)
+(* predict an average value and its standard deviation
+ * over all trees in the forest *)
+let predict_one ncores forest x =
+  let pred_vals =
+    RFC.array_parmap ncores
+      (fun (tree, _oob) -> tree_predict tree x) forest 0.0 in
+  let avg = A.favg pred_vals in
+  let std = Utls.std_dev avg pred_vals in
+  (avg, std)
 
-(* FBR: check when we really need to create a new RNG *)
+(* will scale better than predict_one *)
+let predict_many ncores forest xs =
+  RFC.array_parmap ncores (predict_one 1 forest) xs (0.0, 0.0)
 
-(* FBR: store the RNG state along with the tree? *)
-
-(* (\* will scale better than predict_one *\)
- * let predict_many ncores rng forest xs =
- *   array_parmap ncores (predict_one 1 rng forest) xs (0, 0.0)
- * 
- * let predict_many_margin ncores rng forest xs =
- *   array_parmap ncores (predict_one_margin 1 rng forest) xs (0, 0.0, 0.0)
- * 
- * let predict_OOB forest train =
- *   let card_OOB =
- *     A.fold_left (fun acc (_tree, oob) -> acc + (A.length oob)) 0 forest in
- *   let truth_preds = A.create card_OOB (0, 0) in
- *   let i = ref 0 in
- *   A.iter (fun (tree, oob) ->
- *       let train_OOB = extract oob train in
- *       let truths = A.map snd train_OOB in
- *       let preds = A.map (tree_predict tree) train_OOB in
- *       A.iter2 (fun truth pred ->
- *           truth_preds.(!i) <- (truth, pred);
- *           incr i
- *         ) truths preds
- *     ) forest;
- *   truth_preds
- * 
- * (\* MCC for particular class of interest *\)
- * let mcc target_class truth_preds =
- *   let tp_ = ref 0 in
- *   let tn_ = ref 0 in
- *   let fp_ = ref 0 in
- *   let fn_ = ref 0 in
- *   A.iter (fun (truth, pred) ->
- *       match truth = target_class, pred = target_class with
- *       | true , true  -> incr tp_
- *       | false, false -> incr tn_
- *       | true , false -> incr fn_
- *       | false, true  -> incr fp_
- *     ) truth_preds;
- *   let tp = !tp_ in
- *   let tn = !tn_ in
- *   let fp = !fp_ in
- *   let fn = !fn_ in
- *   Log.info "TP: %d TN: %d FP: %d FN: %d" tp tn fp fn;
- *   float ((tp * tn) - (fp * fn)) /.
- *   sqrt (float ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)))
- * 
- * let accuracy truth_preds =
- *   let n = A.length truth_preds in
- *   let correct_preds = ref 0 in
- *   A.iter (fun (truth, pred) ->
- *       if truth = pred then incr correct_preds
- *     ) truth_preds;
- *   (float !correct_preds) /. (float n)
- * 
- * module Score_label = struct
- *   type t = float * bool
- *   let get_score (s, _l) = s
- *   let get_label (_s, l) = l
- * end
- * 
- * module ROC = Cpm.MakeROC.Make(Score_label)
- * 
- * let roc_auc target_class preds true_labels =
- *   let score_labels =
- *     A.map2 (fun (pred_label, pred_proba) true_label ->
- *         if pred_label = target_class then
- *           (pred_proba, true_label = target_class)
- *         else
- *           (1.0 -. pred_proba, true_label = target_class)
- *       ) preds true_labels in
- *   ROC.auc_a score_labels *)
+let predict_OOB forest train =
+  let card_OOB =
+    A.fold_left (fun acc (_tree, oob) -> acc + (A.length oob)) 0 forest in
+  let truth_preds = A.create card_OOB (0.0, 0.0) in
+  let i = ref 0 in
+  A.iter (fun (tree, oob) ->
+      let train_OOB = extract oob train in
+      let truths = A.map snd train_OOB in
+      let preds = A.map (tree_predict tree) train_OOB in
+      A.iter2 (fun truth pred ->
+          truth_preds.(!i) <- (truth, pred);
+          incr i
+        ) truths preds
+    ) forest;
+  truth_preds
 
 type filename = string
 
