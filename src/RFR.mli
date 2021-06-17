@@ -5,12 +5,7 @@
 
 (* Random Forests Regressor *)
 
-module A = BatArray
 module IntMap = BatMap.Int
-module IntSet = BatSet.Int
-module L = BatList
-module Log = Dolog.Log
-module Rand = BatRandom.State
 
 type features = int IntMap.t
 type dep_var = float
