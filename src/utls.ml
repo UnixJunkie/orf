@@ -9,6 +9,7 @@ module A = BatArray
 module Fn = Filename
 module IS = BatSet.Int
 module IntMap = BatMap.Int
+module IntSet = BatSet.Int
 module L = BatList
 module LO = Line_oriented
 module Log = Dolog.Log
@@ -419,3 +420,21 @@ let bound_between mini maxi x =
   if x < mini then mini
   else if x > maxi then maxi
   else x
+
+exception Not_singleton
+
+let is_singleton s =
+  try
+    let must_false = ref false in
+    IntSet.iter (fun _x ->
+        if !must_false then raise Not_singleton;
+        must_false := true
+      ) s;
+    !must_false (* handle empty set case *)
+  with Not_singleton -> false
+
+(* tests
+   assert (not (is_singleton IntSet.empty));;
+   assert (is_singleton (IntSet.singleton 1));;
+   assert (not (is_singleton (IntSet.of_list [1;2])));;
+*)

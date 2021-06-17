@@ -30,23 +30,6 @@ type metric = Gini (* default *)
             | Shannon (* TODO *)
             | MCC (* TODO *)
 
-exception Not_singleton
-
-let is_singleton s =
-  try
-    let must_false = ref false in
-    IntSet.iter (fun _x ->
-        if !must_false then raise Not_singleton;
-        must_false := true
-      ) s;
-    !must_false (* handle empty set case *)
-  with Not_singleton -> false
-
-(* tests
-   assert (not (is_singleton IntSet.empty));;
-   assert (is_singleton (IntSet.singleton 1));;
-   assert (not (is_singleton (IntSet.of_list [1;2])));;
-*)
 
 (* a feature with non constant value allows to discriminate samples *)
 let collect_non_constant_features samples =
@@ -64,7 +47,7 @@ let collect_non_constant_features samples =
         ) features
     ) samples;
   Ht.fold (fun feat vals acc ->
-      if is_singleton vals then acc
+      if Utls.is_singleton vals then acc
       else (feat, vals) :: acc
     ) feat_vals []
 
