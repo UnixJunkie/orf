@@ -350,6 +350,10 @@ let array_rand_elt rng a =
   let i = BatRandom.State.int rng n in
   Array.unsafe_get a i
 
+(* not very efficient but... *)
+let list_rand_elt rng l =
+  array_rand_elt rng (A.of_list l)
+
 let list_really_remove_one l x =
   assert(L.mem x l); (* BatList.remove doesn't enforce this *)
   L.remove l x
