@@ -262,10 +262,10 @@ let array_parmap ncores f a init =
         if !in_count = n then
           raise Parany.End_of_input
         else
-          let x = a.(!in_count) in
+          let i = !in_count in
           incr in_count;
-          x)
-    ~work:(fun x -> f x)
+          i)
+    ~work:(fun i -> f (A.unsafe_get a i))
     ~mux:(fun y ->
         res.(!out_count) <- y;
         incr out_count);
@@ -339,7 +339,6 @@ let tree_predict tree (features, _label) =
   loop tree
 
 (* label to predicted probability hash table *)
-(* FBR: performance: should return an array, not a list *)
 let predict_one_proba ncores forest x =
   let pred_labels =
     array_parmap ncores
