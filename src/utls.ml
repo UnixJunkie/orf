@@ -442,3 +442,27 @@ let is_singleton s =
    assert (is_singleton (IntSet.singleton 1));;
    assert (not (is_singleton (IntSet.of_list [1;2])));;
 *)
+
+let square x =
+  x *. x
+
+let standard_deviation a =
+  let n = float (A.length a) in
+  let avg = A.favg a in
+  let sum_squared_errors =
+    A.fold (fun acc x ->
+        acc +. square (x -. avg)
+      ) 0.0 a in
+  sqrt (sum_squared_errors /. n)
+
+(* test
+    standard_deviation [|2.;4.;4.;4.;5.;5.;7.;9.|] = 2.0
+*)
+
+let std_dev avg a =
+  let n = float (A.length a) in
+  let sum_squared_errors =
+    A.fold (fun acc x ->
+        acc +. square (x -. avg)
+      ) 0.0 a in
+  sqrt (sum_squared_errors /. n)
