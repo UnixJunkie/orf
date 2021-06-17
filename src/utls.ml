@@ -212,14 +212,19 @@ let prepend x xs =
 let in_bounds lb x hb =
   x >= lb && x <= hb
 
-let list_medianf (l: float list): float =
-  let xs = A.of_list l in
+let array_medianf (xs: float array): float =
   A.sort BatFloat.compare xs;
   let n = A.length xs in
   if n mod 2 = 1 then
-    xs.(n/2)
+    A.unsafe_get xs (n / 2)
   else
-    0.5 *. (xs.(n/2) +. xs.(n/2 - 1))
+    let before = A.unsafe_get xs ((n / 2) - 1) in
+    let after = A.unsafe_get xs (n / 2) in
+    0.5 *. (before +. after)
+
+let list_medianf (l: float list): float =
+  let xs = A.of_list l in
+  array_medianf xs
 (*$T list_medianf
    list_medianf [1.;2.;3.;4.;5.] = 3.0
    list_medianf [1.;2.;3.;4.] = 2.5
