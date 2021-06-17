@@ -7,6 +7,7 @@ open Printf
 
 module A = BatArray
 module Fn = Filename
+module Ht = BatHashtbl
 module IS = BatSet.Int
 module IntMap = BatMap.Int
 module IntSet = BatSet.Int
@@ -471,3 +472,11 @@ let std_dev avg a =
         acc +. square (x -. avg)
       ) 0.0 a in
   sqrt (sum_squared_errors /. n)
+
+let ht_iteri ht f =
+  let i = ref 0 in
+  Ht.iter (fun x ->
+      let j = !i in
+      incr i;
+      f j x
+    ) ht
