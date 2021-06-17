@@ -473,10 +473,20 @@ let std_dev avg a =
       ) 0.0 a in
   sqrt (sum_squared_errors /. n)
 
-let ht_iteri ht f =
+let ht_iteri f ht =
   let i = ref 0 in
   Ht.iter (fun x ->
       let j = !i in
       incr i;
       f j x
     ) ht
+
+let array_iter3 a1 a2 a3 f =
+  let n = A.length a1 in
+  assert(n = A.length a2 && n = A.length a3);
+  for i = 0 to n - 1 do
+    let x = A.unsafe_get a1 i in
+    let y = A.unsafe_get a2 i in
+    let z = A.unsafe_get a3 i in
+    f x y z
+  done
