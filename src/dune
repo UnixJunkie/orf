@@ -6,6 +6,7 @@
  (private_modules utls)
  (libraries batteries cpm dolog parany line_oriented))
 
+; private executable; not installed
 (executable
  (name test)
  (modules test)
