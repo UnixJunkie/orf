@@ -11,6 +11,7 @@ module IntSet = BatSet.Int
 module L = BatList
 module Log = Dolog.Log
 module Rand = BatRandom.State
+module Ht = BatHashtbl
 
 type features = int IntMap.t
 type dep_var = float
@@ -202,19 +203,25 @@ let predict_many ncores forest xs =
   RFC.array_parmap ncores (predict_one 1 forest) xs (0.0, 0.0)
 
 let predict_OOB forest train =
-  let card_OOB =
-    A.fold_left (fun acc (_tree, oob) -> acc + (A.length oob)) 0 forest in
-  let truth_preds = A.create card_OOB (0.0, 0.0) in
-  let i = ref 0 in
+  let n = A.length train in
+  let oob_idx2preds = Ht.create n in
   A.iter (fun (tree, oob) ->
       let train_OOB = extract oob train in
       let truths = A.map snd train_OOB in
       let preds = A.map (tree_predict tree) train_OOB in
-      A.iter2 (fun truth pred ->
-          truth_preds.(!i) <- (truth, pred);
-          incr i
-        ) truths preds
+      Utls.array_iter3 oob truths preds (fun oob_idx truth pred ->
+          try
+            let prev_truth, prev_preds = Ht.find oob_idx2preds oob_idx in
+            assert(prev_truth = truth);
+            Ht.replace oob_idx2preds oob_idx (prev_truth, pred :: prev_preds)
+          with Not_found ->
+            Ht.add oob_idx2preds oob_idx (truth, [pred])
+        )
     ) forest;
+  let truth_preds = A.create (Ht.length oob_idx2preds) (0.0, 0.0) in
+  Utls.ht_iteri (fun i _oob_idx (truth, preds) ->
+      A.unsafe_set truth_preds i (truth, L.favg preds)
+    ) oob_idx2preds;
   truth_preds
 
 type filename = string
