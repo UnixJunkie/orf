@@ -46,8 +46,9 @@ val predict_many_margin: int -> Random.State.t -> forest -> sample array ->
     than when the model was trained.
     Can be used to get a reliable model performance estimate,
     even if you don't have a left out test set.
-    [truth_preds = predict_OOB forest training_set] *)
-val predict_OOB: forest -> sample array -> (class_label * class_label) array
+    [truth_preds = predict_OOB rng forest training_set] *)
+val predict_OOB: Random.State.t -> forest -> sample array ->
+  (class_label * class_label) array
 
 (** Matthews Correlation Coefficient (MCC).
     [mcc target_class_label truth_preds] *)
