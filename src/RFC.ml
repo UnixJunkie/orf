@@ -27,9 +27,8 @@ type tree = Leaf of class_label
                     tree (* rhs *)
 
 type metric = Gini (* default *)
-            | Shannon (* TODO *)
-            | MCC (* TODO *)
-
+            | Shannon (* TODO; WARN: check min value is still 0.0 *)
+            | MCC (* TODO; WARN: check min value is still 0.0 *)
 
 (* a feature with non constant value allows to discriminate samples *)
 let collect_non_constant_features samples =
@@ -140,10 +139,15 @@ let cost_function metric left right =
   let card_left = A.length left in
   let card_right = A.length right in
   let n = float (card_left + card_right) in
-  let w_left = (float card_left) /. n in
-  let w_right = (float card_right) /. n in
-  ((w_left  *. (metric left)) +.
-   (w_right *. (metric right)))
+  match card_left, card_right with
+  | 0, 0 -> assert(false)
+  | 0, _ -> metric right (* NaN protect *)
+  | _, 0 -> metric left (* NaN protect *)
+  | _, _ ->
+    let w_left = (float card_left) /. n in
+    let w_right = (float card_right) /. n in
+    ((w_left  *. (metric left)) +.
+     (w_right *. (metric right)))
 
 let majority_class rng samples =
   if A.length samples = 0 then
@@ -175,6 +179,7 @@ let choose_min_cost rng = function
   | [x] -> x
   | cost_splits ->
     let min_cost = L.min (L.rev_map fst5 cost_splits) in
+    (* Log.info "min_cost: %f" min_cost; *)
     let candidates =
       L.fold (fun acc (cost, feature, value, (left, right)) ->
           if cost = min_cost then
@@ -368,11 +373,7 @@ let predict_one_margin ncores rng forest x =
   let margin = pred_proba -. other_label_p_max in
   (pred_label, pred_proba, margin)
 
-(* FBR: (predicted_label, label_probability, margin) *)
-
 (* FBR: check when we really need to create a new RNG *)
-
-(* FBR: store the RNG state along with the tree? *)
 
 (* will scale better than predict_one *)
 let predict_many ncores rng forest xs =
