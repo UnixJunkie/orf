@@ -1,5 +1,6 @@
 
 module IntMap = BatMap.Int
+module IntSet = BatSet.Int
 
 type features = int IntMap.t
 type class_label = int
@@ -71,3 +72,21 @@ val save: filename -> forest -> unit
 
 (** Restore model from file (Marshal) *)
 val restore: filename -> forest
+
+(** The following are needed to implement RFR *)
+
+val collect_non_constant_features:
+  (int IntMap.t * 'a) array -> (int * IntSet.t) list
+
+val partition_samples: int -> int -> (int IntMap.t * 'a) array ->
+  (int IntMap.t * 'a) array * (int IntMap.t * 'a) array
+
+val cost_function: ('a array -> float) -> 'a array -> 'a array -> float
+
+val choose_min_cost: Random.State.t -> ('a * 'b * 'c * ('d * 'e)) list ->
+  'a * 'b * 'c * ('d * 'e)
+
+(* this fun. should go into the parany library *)
+val array_parmap: int -> ('a -> 'b) -> 'a array -> 'b -> 'b array
+
+val ratio_to_int: int -> int -> string -> int_or_float -> int
