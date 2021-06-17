@@ -84,8 +84,8 @@ val partition_samples: int -> int -> (int IntMap.t * 'a) array ->
 
 val cost_function: ('a array -> float) -> 'a array -> 'a array -> float
 
-val choose_min_cost: Random.State.t -> ('a * 'b * 'c * ('d * 'e)) list ->
-  'a * 'b * 'c * ('d * 'e)
+val choose_min_cost: Random.State.t -> (float * 'b * 'c * ('d * 'e)) list ->
+  float * 'b * 'c * ('d * 'e)
 
 (* this fun. should go into the parany library *)
 val array_parmap: int -> ('a -> 'b) -> 'a array -> 'b -> 'b array
