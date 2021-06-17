@@ -159,15 +159,14 @@ let majority_class rng samples =
         ) ht 0 in
     (* randomly draw from all those with max_count *)
     let majority_classes =
-      A.of_list
-        (Ht.fold (fun class_label count acc ->
-             if count = max_count then class_label :: acc
-             else acc
-           ) ht []) in
+      Ht.fold (fun class_label count acc ->
+          if count = max_count then class_label :: acc
+          else acc
+        ) ht [] in
     (* let chosen = Utls.array_rand_elt rng majority_classes in
      * Log.info "majority: %d" chosen;
      * chosen *)
-    Utls.array_rand_elt rng majority_classes
+    Utls.list_rand_elt rng majority_classes
 
 let fst5 (a, _, _, (_, _)) = a
 
@@ -177,13 +176,12 @@ let choose_min_cost rng = function
   | cost_splits ->
     let min_cost = L.min (L.rev_map fst5 cost_splits) in
     let candidates =
-      A.of_list
-        (L.fold (fun acc (cost, feature, value, (left, right)) ->
-             if cost = min_cost then
-               (cost, feature, value, (left, right)) :: acc
-             else acc
-           ) [] cost_splits) in
-    Utls.array_rand_elt rng candidates
+      L.fold (fun acc (cost, feature, value, (left, right)) ->
+          if cost = min_cost then
+            (cost, feature, value, (left, right)) :: acc
+          else acc
+        ) [] cost_splits in
+    Utls.list_rand_elt rng candidates
 
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
@@ -336,6 +334,7 @@ let tree_predict tree (features, _label) =
   loop tree
 
 (* label to predicted probability hash table *)
+(* FBR: performance: should return an array, not a list *)
 let predict_one_proba ncores forest x =
   let pred_labels =
     array_parmap ncores
@@ -350,21 +349,17 @@ let predict_one ncores rng forest x =
   let label_probabilities = predict_one_proba ncores forest x in
   let p_max = L.max (L.rev_map snd label_probabilities) in
   let candidates =
-    A.of_list (
-      L.filter (fun (_label, p) -> p = p_max) label_probabilities
-    ) in
-  Utls.array_rand_elt rng candidates
+    L.filter (fun (_label, p) -> p = p_max) label_probabilities in
+  Utls.list_rand_elt rng candidates
 
 let predict_one_margin ncores rng forest x =
   let label_probabilities = predict_one_proba ncores forest x in
   let p_max = L.max (L.rev_map snd label_probabilities) in
   let candidates =
-    A.of_list (
-      L.filter (fun (_label, p) -> p = p_max) label_probabilities
-    ) in
-  let pred_label, pred_proba = Utls.array_rand_elt rng candidates in
+    L.filter (fun (_label, p) -> p = p_max) label_probabilities in
+  let pred_label, pred_proba = Utls.list_rand_elt rng candidates in
   let other_label_p_max =
-    A.fold_left (fun acc (label, p) ->
+    L.fold_left (fun acc (label, p) ->
         if label <> pred_label then
           max acc p
         else
