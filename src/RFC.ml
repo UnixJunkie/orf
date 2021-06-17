@@ -51,6 +51,9 @@ let collect_non_constant_features samples =
       else (feat, vals) :: acc
     ) feat_vals []
 
+let feat_get feat features =
+  IntMap.find_default 0 feat features
+
 (* split a node *)
 (* FBR: maybe this can be accelerated:
  *   we need all samples sorted per feature;
@@ -58,7 +61,7 @@ let collect_non_constant_features samples =
 let partition_samples feature threshold samples =
   A.partition (fun (features, _class_label) ->
       (* sparse representation --> 0s almost everywhere *)
-      let value = IntMap.find_default 0 feature features in
+      let value = feat_get feature features in
       value <= threshold
     ) samples
 
@@ -68,9 +71,6 @@ let _partition_samples_index index feature threshold sample_indexes =
   A.partition (fun i ->
       IntSet.mem i le_set
     ) sample_indexes
-
-let feat_get feat features =
-  IntMap.find_default 0 feat features
 
 (* for each (feat, threshold) pair, record the set of samples
    (just their indexes in fact) which have feat_val <= threshold *)
@@ -326,7 +326,7 @@ let tree_predict tree (features, _label) =
   let rec loop = function
     | Leaf label -> label
     | Node (lhs, feature, threshold, rhs) ->
-      let value = IntMap.find_default 0 feature features in
+      let value = feat_get feature features in
       if value <= threshold then
         loop lhs
       else
