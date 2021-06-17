@@ -47,10 +47,26 @@ let mean_squared_error samples =
       ) 0.0 samples in
   sum_squared_errors /. n
 
+let mean_absolute_error samples =
+  let n = float (A.length samples) in
+  let avg = average_dep_vars samples in
+  let sum_abs_errors =
+    A.fold (fun acc (_sample, y) ->
+        acc +. abs_float (y -. avg)
+      ) 0.0 samples in
+  sum_abs_errors /. n
+
+let mean_absolute_deviation samples =
+  let n = float (A.length samples) in
+  let values = A.map snd samples in
+  let med = Utls.array_medianf values in
+  let abs_devs = A.map (fun x -> abs_float (x -. med)) values in
+  (Utls.array_medianf abs_devs) /. n
+
 let metric_of = function
   | MSE -> mean_squared_error
-  | MAE -> failwith "MAE not implemented yet"
-  | MAD -> failwith "MAD not implemented yet"
+  | MAE -> mean_absolute_error
+  | MAD -> mean_absolute_deviation
 
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)

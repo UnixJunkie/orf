@@ -23,7 +23,7 @@ type tree = Leaf of dep_var
                     int * int (* (feature, threshold) *) *
                     tree (* rhs *)
 
-type metric = MSE (* Mean Squared Error *)
+type metric = MSE (* Mean Squared Error (use as default) *)
             | MAE (* Mean Absolute Error *)
             | MAD (* Median Absolute Deviation *)
 
