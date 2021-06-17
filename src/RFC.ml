@@ -295,7 +295,7 @@ let ratio_to_int mini maxi var_name x =
       | Float f ->
         let () =
           Utls.enforce (0.0 < f && f <= 1.0)
-            (sprintf "RFC.train: %s not in ]0.0,1.0]" var_name) in
+            (sprintf "RFC.ratio_to_int: %s not in ]0.0,1.0]" var_name) in
         BatFloat.round_to_int (f *. (float maxi))
     )
 
