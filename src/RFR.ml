@@ -208,3 +208,22 @@ let save fn forest =
 
 let restore fn =
   Utls.restore fn
+
+(* coefficient of determination R2 *)
+let r2 truth_preds =
+  let n = float (A.length truth_preds) in
+  let sum_squared_diffs =
+    A.fold_left (fun acc (x, y) ->
+        acc +. Utls.square (x -. y)
+      ) 0.0 truth_preds in
+  let sum_squared_truth_diffs =
+    let avg_truth =
+      let sum =
+        A.fold_left (fun acc (truth, _pred) ->
+            acc +. truth
+          ) 0.0 truth_preds in
+      sum /. n in
+    A.fold_left (fun acc (truth, _pred) ->
+        acc +. square (truth -. avg_truth)
+      ) 0.0 truth_preds in
+  1.0 -. (sum_squared_diffs /. sum_squared_truth_diffs)
