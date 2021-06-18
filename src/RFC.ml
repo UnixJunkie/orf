@@ -252,7 +252,7 @@ let extract indexes (samples: sample array): sample array =
 let rand_max_bound = 1073741823 (* 2^30 - 1 *)
 
 (* FBR: this should go into parany *)
-(* array input order is preserved *)
+(* array input order is preserved (REQUIRED by predict_many) *)
 let array_parmap ncores f a init =
   let n = A.length a in
   let res = A.create n init in
