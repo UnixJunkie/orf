@@ -456,7 +456,7 @@ let roc_auc target_class preds true_labels =
 type filename = string
 
 let save fn forest =
-  Utls.save fn forest
+  Utls.save fn (drop_OOB forest)
 
 let restore fn =
   Utls.restore fn

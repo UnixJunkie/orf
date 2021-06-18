@@ -227,7 +227,7 @@ let predict_OOB forest train =
 type filename = string
 
 let save fn forest =
-  Utls.save fn forest
+  Utls.save fn (drop_OOB forest)
 
 let restore fn =
   Utls.restore fn

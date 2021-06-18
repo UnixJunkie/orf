@@ -68,7 +68,8 @@ val drop_OOB: forest -> forest
 
 type filename = string
 
-(** Save model to file (Marshal) *)
+(** Save model to file (Marshal)
+    OOB samples are dropped prior to saving the model. *)
 val save: filename -> forest -> unit
 
 (** Restore model from file (Marshal) *)
