@@ -101,7 +101,8 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
         let candidate_splits =
           L.fold (fun acc1 (feature, values) ->
               IntSet.fold (fun value acc2 ->
-                  (feature, value, RFC.partition_samples feature value samples)
+                  (feature, value,
+                   RFC.partition_samples feature value samples)
                   :: acc2
                 ) values acc1
             ) [] split_candidates in
