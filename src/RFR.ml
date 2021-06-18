@@ -10,7 +10,7 @@ module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
 module Log = Dolog.Log
-module Rand = BatRandom.State
+module RNG = Random.State
 module Ht = BatHashtbl
 
 type features = int IntMap.t
@@ -137,11 +137,10 @@ let forest_grow
     ncores rng metric ntrees max_features max_samples min_node_size train =
   (* treat the RNG as a seed stream, for reproducibility
      despite potentially out of order parallel run *)
-  let seeds =
-    A.init ntrees (fun _ -> Rand.int rng rand_max_bound) in
+  let seeds = A.init ntrees (fun _ -> RNG.int rng rand_max_bound) in
   RFC.array_parmap ncores
     (fun seed ->
-       let rng' = Rand.make [|seed|] in
+       let rng' = RNG.make [|seed|] in
        tree_grow rng' metric max_features max_samples min_node_size train
     )
     seeds (Leaf 0.0, [||])
