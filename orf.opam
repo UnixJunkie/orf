@@ -7,10 +7,10 @@ dev-repo: "git+https://github.com/UnixJunkie/orf.git"
 license: "LGPL w/ linking exception"
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
-  "batteries"
+  "batteries" {>= "2.6.0"}
   "cpm"
-  "dolog"
-  "dune" {>= "1.10"}
+  "dolog" {>= "4.0.0"}
+  "dune" {>= "2.8"}
   "minicli"
   "ocaml"
   "parany"
