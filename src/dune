@@ -16,4 +16,4 @@
  (name model)
  (public_name orf_model)
  (modules model)
- (libraries orf molenc minicli line_oriented))
+ (libraries orf cpm molenc minicli line_oriented))
