@@ -11,3 +11,9 @@
  (name test)
  (modules test)
  (libraries orf minicli line_oriented))
+
+(executable
+ (name model)
+ (public_name orf_model)
+ (modules model)
+ (libraries orf molenc minicli line_oriented))
