@@ -1,78 +1,86 @@
+(* Copyright (C) 2021, Francois Berenger
+
+   Tsuda laboratory, Tokyo university,
+   5-1-5 Kashiwa-no-ha, Kashiwa-shi, Chiba-ken, 277-8561, Japan. *)
+
 open Printf
 
+module A = BatArray
 module Buff = Buffer
 module CLI = Minicli.CLI
 module Fn = Filename
 module Fp = Molenc.Fingerprint
+module IntMap = BatMap.Int
 module L = BatList
+module LO = Line_oriented
 module Log = Dolog.Log
-module Stats = Cpm.RegrStats
 module Mol = Molenc.FpMol
+module RFR = Orf.RFR
+module Stats = Cpm.RegrStats
 
 let max_feat_id molecules =
   L.fold_left (fun acc mol ->
       BatInt.max acc (Fp.max_feat_id (Mol.get_fp mol))
     ) (-1) molecules
 
-type mode = Save of string
-          | Load of string
-          | Save_to_temp
+type model_file_mode = Save of string
+                     | Load of string
+                     | Save_to_temp
 
-let train_model
-    nb_features verbose nprocs nb_trees training_set model_fn =
-  let train_csv_fn = Fn.temp_file "RFR_train_" ".csv" in
-  Common.csv_dump train_csv_fn nb_features training_set;
-  let could_train =
-    Oranger.RF.train
-      ~debug:verbose ~nprocs Regression nb_trees train_csv_fn
-      "Y" (* name of the target variable column *)
-      model_fn in
-  Utls.enforce could_train (fun () ->
-      "RFR.train_test: could not train: train_csv_fn: " ^ train_csv_fn)
+let intmap_of_fp mol =
+  Molenc.Fingerprint.key_values (Mol.get_fp mol)
 
-let test_model
-    nb_features verbose nb_trees test_set model_fn maybe_output_fn =
-  let test_csv_fn = Fn.temp_file "RFR_test_" ".csv" in
-  Common.csv_dump test_csv_fn nb_features test_set;
-  let preds_stdevs =
-    BatOption.get
-      (Oranger.RF.predict ~debug:verbose nb_trees test_csv_fn model_fn) in
-  let names_preds_stdevs =
-    let names = L.map Mol.get_name test_set in
-    L.map2 Utls.prepend2 names preds_stdevs in
-  begin match maybe_output_fn with
-    | None -> ()
-    | Some fn ->
-      Utls.with_out_file fn (fun out ->
-          L.iter (fun (name, pred, stdev) ->
-              fprintf out "%s %f %f\n" name pred stdev
-            ) names_preds_stdevs
-        )
-  end;
-  names_preds_stdevs
+(* RFR.(train
+ *        ncores
+ *        rng
+ *        MSE
+ *        ntrees
+ *        (Float feats_portion)
+ *        nb_features
+ *        (Float samples_portion)
+ *        min_node_size
+ *        train_set) *)
 
-let train_test_NxCV verbose nprocs nb_trees nb_features nfolds training_set =
-  let folds = L.cv_folds nfolds training_set in
+(* RFR.predict_many ncores trained_model test_set *)
+
+(* FBR: I want R2 and RMSE of the model *)
+
+(* FBR: I also want the actual Vs. pred curve *)
+
+let train_test_NxCV nprocs train_fun test_fun nfolds training_set =
+  let folds = Cpm.Utls.cv_folds nfolds training_set in
   Parany.Parmap.parfold nprocs
     (fun (train, test) ->
        let actual = L.map Mol.get_value test in
-       let model_fn = Fn.temp_file "RFR_" ".model" in
-       train_model
-         nb_features verbose 1 nb_trees train model_fn;
-       let names_preds_stdevs =
-         test_model nb_features verbose nb_trees test model_fn None in
-       L.map2 Utls.prepend3 actual names_preds_stdevs)
+       let model_fn = Fn.temp_file "Orf_" ".model" in
+       train_fun model_fn train;
+       let preds_stdevs = test_fun model_fn test in
+       L.map2 (fun actual (pred, pred_std) ->
+           (actual, pred, pred_std)
+         ) actual preds_stdevs
+    )
     (fun acc x -> L.rev_append x acc)
     [] folds
 
-let y_randomize rng training_set =
-  (* since we randomize Y, we don't care about preserving the order
-   * of the list *)
-  let activities = L.rev_map Mol.get_value training_set in
-  let rand_acts = L.shuffle ~state:rng activities in
-  L.rev_map2 (fun mol act ->
-      Mol.set_value mol act
-    ) training_set rand_acts
+(* Orf.RFR needs a samples array *)
+let samples_array_of_mols_list mols =
+  let n = L.length mols in
+  let dummy = (IntMap.empty, 0.0) in
+  if n = 0 then
+    let () = Log.warn "Model.samples_array_of_mols_list: no mols" in
+    A.make 0 dummy
+  else
+    let res = A.make n dummy in
+    L.iteri (fun i mol ->
+        let activity = Mol.get_value mol in
+        let features = Fp.key_values (Mol.get_fp mol) in
+        res.(i) <- (features, activity)
+      ) mols;
+    res
+
+let fst3 (a, _, _) = a
+let snd3 (_, b, _) = b
+let trd3 (_, _, c) = c
 
 let main () =
   Log.color_on ();
@@ -121,6 +129,11 @@ let main () =
   let rec_plot = CLI.get_set_bool ["--rec-plot"] args in
   let verbose = CLI.get_set_bool ["-v"] args in
   let train_fn = CLI.get_string ["--train"] args in
+  let feats_portion = CLI.get_float_def ["--feat"] args 1.0 in
+  assert(feats_portion > 0.0 && feats_portion <= 1.0);
+  let samples_portion = CLI.get_float_def ["--samples"] args 1.0 in
+  assert(samples_portion > 0.0 && samples_portion <= 1.0);
+  let min_node_size = CLI.get_int_def ["--min-node"] args 1 in
   begin match CLI.get_string_opt ["-s"] args with
     | None -> ()
     | Some fn ->
@@ -135,38 +148,45 @@ let main () =
        train_portion := 0.0;
        mode := (Load fn))
   end;
-  let y_rand = CLI.get_set_bool ["--y-rand"] args in
   CLI.finalize(); (* ------------------------------------------------------- *)
   let data_dir = Fn.dirname train_fn in
   let rng = match maybe_seed with
     | None -> Random.State.make_self_init ()
     | Some seed -> Random.State.make [|seed|] in
   let model_fn = match !mode with
-    | Save_to_temp -> Fn.temp_file "RFR_" ".model"
+    | Save_to_temp -> Fn.temp_file "Orf_" ".model"
     | Load fn -> fn
     | Save fn -> fn in
-  let nb_features, train, test =
-    let all_molecules =
-      let ordered = Utls.map_on_lines_of_file train_fn Mol.of_string in
-      let disordered = match !mode with
-        | Save_to_temp | Save _ ->
-          (* destroy any molecule ordering the input file might have *)
-          BatList.shuffle ~state:rng ordered
-        | Load _fn ->
-          (* don't reorder molecules in production *)
-          ordered in
-      if y_rand then
-        (* Y-randomization:
-           destroy link between structure and response variable *)
-        y_randomize rng disordered
-      else disordered in
+  let nb_features, train_set, test_set =
+    let all_lines =
+      let ordered = Mol.molecules_of_file train_fn in
+      match !mode with
+      | Save_to_temp | Save _ ->
+        (* destroy any molecule ordering the input file might have *)
+        BatList.shuffle ~state:rng ordered
+      | Load _fn ->
+        (* don't reorder lines in production *)
+        ordered in
     let training, testing =
-      Common.train_test_split !train_portion all_molecules in
-    (max_feat + 1, training, testing) in
+      Cpm.Utls.train_test_split !train_portion all_lines in
+    (max_feat + 1,
+     samples_array_of_mols_list training,
+     samples_array_of_mols_list testing) in
   Log.info "nb_features: %d" nb_features;
-  let acts_names_preds_stdevs = match maybe_nfolds with
+  let train_fun =
+    RFR.(train
+           nprocs
+           rng
+           MSE
+           nb_trees
+           (Float feats_portion)
+           nb_features
+           (Float samples_portion)
+           min_node_size
+           train_set) in
+  let acts_preds_stdevs = match maybe_nfolds with
     | Some nfolds ->
-      train_test_NxCV verbose nprocs nb_trees nb_features nfolds train
+      train_test_NxCV nprocs train_fun test_fun nfolds train
     | None ->
       begin
         begin match !mode with
@@ -183,9 +203,9 @@ let main () =
         L.map2 Utls.prepend3 actual names_preds_stdevs
       end in
   let nfolds = BatOption.default 1 maybe_nfolds in
-  let actual = L.map Utls.fst4 acts_names_preds_stdevs in
-  let preds = L.map Utls.trd4 acts_names_preds_stdevs in
-  let stdevs = L.map Utls.frt4 acts_names_preds_stdevs in
+  let actual = L.map fst3 acts_preds_stdevs in
+  let preds = L.map snd3 acts_preds_stdevs in
+  let stdevs = L.map trd3 acts_preds_stdevs in
   let r2 = Stats.r2 actual preds in
   let plot_title =
     sprintf "T=%s |RF|=%d k=%d R2=%.2f" data_dir nb_trees nfolds r2 in
