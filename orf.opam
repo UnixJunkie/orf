@@ -16,6 +16,9 @@ depends: [
   "parany" {>= "11.0.0"}
   "line_oriented"
 ]
+depopts: [
+  "conf-gnuplot"
+]
 synopsis: "OCaml Random Forests"
 description:"""
 Random Forests (RFs) can do classification or regression modeling.
