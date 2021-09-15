@@ -18,30 +18,9 @@ module Mol = Molenc.FpMol
 module RFR = Orf.RFR
 module Stats = Cpm.RegrStats
 
-let max_feat_id molecules =
-  L.fold_left (fun acc mol ->
-      BatInt.max acc (Fp.max_feat_id (Mol.get_fp mol))
-    ) (-1) molecules
-
 type model_file_mode = Save of string
                      | Load of string
                      | Save_to_temp
-
-let intmap_of_fp mol =
-  Molenc.Fingerprint.key_values (Mol.get_fp mol)
-
-(* RFR.(train
- *        ncores
- *        rng
- *        MSE
- *        ntrees
- *        (Float feats_portion)
- *        nb_features
- *        (Float samples_portion)
- *        min_node_size
- *        train_set) *)
-
-(* RFR.predict_many ncores trained_model test_set *)
 
 (* FBR: I want R2 and RMSE of the model *)
 
@@ -127,7 +106,7 @@ let main () =
   let max_feat = CLI.get_int ["--max-feat"] args in
   let no_reg_plot = CLI.get_set_bool ["--no-regr-plot"] args in
   let rec_plot = CLI.get_set_bool ["--rec-plot"] args in
-  let verbose = CLI.get_set_bool ["-v"] args in
+  let _verbose = CLI.get_set_bool ["-v"] args in
   let train_fn = CLI.get_string ["--train"] args in
   let feats_portion = CLI.get_float_def ["--feat"] args 1.0 in
   assert(feats_portion > 0.0 && feats_portion <= 1.0);
@@ -139,7 +118,7 @@ let main () =
     | Some fn ->
       (if !train_portion < 1.0 then Log.warn "p forced to 1.0 because of -s";
        train_portion := 1.0;
-       mode := (Save fn))
+       mode := Save fn)
   end;
   begin match CLI.get_string_opt ["-l"] args with
     | None -> ()
@@ -173,46 +152,56 @@ let main () =
      samples_array_of_mols_list training,
      samples_array_of_mols_list testing) in
   Log.info "nb_features: %d" nb_features;
-  let train_fun =
-    RFR.(train
-           nprocs
-           rng
-           MSE
-           nb_trees
-           (Float feats_portion)
-           nb_features
-           (Float samples_portion)
-           min_node_size
-           train_set) in
   let acts_preds_stdevs = match maybe_nfolds with
-    | Some nfolds ->
-      train_test_NxCV nprocs train_fun test_fun nfolds train
+    | Some _nfolds ->
+      failwith "not implemented yet"
+      (* train_test_NxCV nprocs train_fun test_fun nfolds train_set *)
     | None ->
       begin
         begin match !mode with
           | Load _ -> () (* no need to train new model *)
-          | Save _fn ->
-            (train_model nb_features verbose nprocs nb_trees train model_fn;
-             exit 0)
+          | Save fn ->
+            begin
+              let rfr = RFR.(train nprocs rng MSE nb_trees (Float feats_portion)
+                               nb_features (Float samples_portion)
+                               min_node_size train_set) in
+              RFR.save fn rfr;
+              exit 0
+            end
           | Save_to_temp ->
-            train_model nb_features verbose nprocs nb_trees train model_fn
+            begin
+              let rfr = RFR.(train nprocs rng MSE nb_trees (Float feats_portion)
+                               nb_features (Float samples_portion)
+                               min_node_size train_set) in
+              RFR.save model_fn rfr;
+              exit 0
+            end
         end;
-        let actual = L.map Mol.get_value test in
-        let names_preds_stdevs =
-          test_model nb_features verbose nb_trees test model_fn maybe_output_fn in
-        L.map2 Utls.prepend3 actual names_preds_stdevs
+        let actual = A.map snd test_set in
+        let rfr = RFR.restore model_fn in
+        let preds_stdevs = RFR.predict_many 1 rfr test_set in
+        A.map2 (fun act (pred, stddev) -> (act, pred, stddev)) actual preds_stdevs
       end in
+  (match maybe_output_fn with
+   | None -> ()
+   | Some fn ->
+     LO.with_out_file fn (fun out ->
+         A.iter (fun (_act, pred, _stddev) ->
+             fprintf out "%f\n" pred
+           ) acts_preds_stdevs
+       )
+  );
   let nfolds = BatOption.default 1 maybe_nfolds in
-  let actual = L.map fst3 acts_preds_stdevs in
-  let preds = L.map snd3 acts_preds_stdevs in
-  let stdevs = L.map trd3 acts_preds_stdevs in
-  let r2 = Stats.r2 actual preds in
+  let actual = A.map fst3 acts_preds_stdevs in
+  let preds = A.map snd3 acts_preds_stdevs in
+  let stdevs = A.map trd3 acts_preds_stdevs in
+  let r2 = Stats.r2 (A.to_list actual) (A.to_list preds) in
   let plot_title =
     sprintf "T=%s |RF|=%d k=%d R2=%.2f" data_dir nb_trees nfolds r2 in
   Log.info "%s" plot_title;
   if rec_plot then
-    Gnuplot.rec_curve actual preds;
+    Gnuplot.rec_curve (A.to_list actual) (A.to_list preds);
   if not no_reg_plot then
-    Gnuplot.regr_plot plot_title actual preds stdevs
+    Gnuplot.regr_plot plot_title (A.to_list actual) (A.to_list preds) (A.to_list stdevs)
 
 let () = main ()
