@@ -15,5 +15,5 @@
 (executable
  (name model)
  (public_name orf_model)
- (modules model)
+ (modules model gnuplot)
  (libraries orf cpm molenc minicli line_oriented))
