@@ -187,6 +187,24 @@ let choose_min_cost rng = function
         ) [] cost_splits in
     Utls.list_rand_elt rng candidates
 
+let fold_partitions f list acc =
+  let rec loop f list prefix acc =
+    match list with
+    | [] -> assert false
+    | [x, bucket] ->
+      let suffix = bucket in
+      let acc = f x prefix suffix acc in
+      acc, suffix
+    | (x, bucket) :: tl ->
+      let acc, suffix = loop f tl (List.rev_append bucket prefix) acc in
+      let suffix = List.rev_append bucket suffix in
+      let acc = f x prefix suffix acc in
+      acc, suffix
+  in
+  let acc, _ =
+    loop f list [] acc
+  in acc
+
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
 let tree_grow (rng: Random.State.t) (* seeded RNG *)
@@ -216,18 +234,27 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
         Leaf (majority_class rng samples)
       | _ ->
         (* select the (feature, threshold) pair minimizing cost *)
-        let candidate_splits =
-          L.fold (fun acc1 (feature, values) ->
-              IntSet.fold (fun value acc2 ->
-                  (feature, value, partition_samples feature value samples)
-                  :: acc2
-                ) values acc1
-            ) [] split_candidates in
+        let table = Hashtbl.create 11 in
         let split_costs =
-          L.rev_map (fun (feature, value, (left, right)) ->
-              let cost = cost_function metric left right in
-              (cost, feature, value, (left, right))
-            ) candidate_splits in
+          L.fold (fun acc (feature, values) ->
+              Hashtbl.clear table ;
+              A.iter (fun ((f, _cl) as sample) ->
+                  Hashtbl.add table (feat_get feature f) sample
+                ) samples ;
+              let buckets : (int * sample list) list =
+                IntSet.to_seq values
+                |> Seq.map (fun value ->
+                    let samples = Hashtbl.find_all table value in
+                    (value, samples))
+                |> List.of_seq
+              in
+              fold_partitions (fun value left right acc ->
+                let left = Array.of_list left in
+                let right = Array.of_list right in
+                let cost = cost_function metric left right in
+                (cost, feature, value, (left, right)) :: acc
+              ) buckets acc
+          ) [] split_candidates in
         (* choose one split minimizing cost *)
         let cost, feature, threshold, (left, right) =
           choose_min_cost rng split_costs in
