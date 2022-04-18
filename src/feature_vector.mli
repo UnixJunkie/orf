@@ -9,11 +9,11 @@ type 'a t
 val iter : (feature -> 'a -> unit) -> 'a t -> unit
 
 (** The zero feature vector. *)
-val zero : 'a t
+val zero : unit -> 'a t
 
 (** [get feature vec] returns the coefficient associated to [feature]
     in the integer-valued vector [vec]. *)
 val get : feature -> int t -> int
 
 (** [set feature coeff vec] sets the value of [vec] for [feature] to [coeff]. *)
-val set : feature -> 'a -> 'a t -> 'a t
+val set : feature -> 'a -> 'a t -> unit

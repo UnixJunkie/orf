@@ -16,11 +16,13 @@ module S = BatString
 open Printf
 
 let features_of_str_tokens toks =
-  L.fold_left (fun acc tok_str ->
+  let vec = Feature_vector.zero () in
+  L.iter (fun tok_str ->
       Scanf.sscanf tok_str "%d:%d" (fun k v ->
-          Feature_vector.set k v acc
-        )
-    ) Feature_vector.zero toks
+          Feature_vector.set k v vec
+      )
+    ) toks ;
+  vec
 
 let sample_of_csv_line l =
   let tokens = S.split_on_char ' ' l in

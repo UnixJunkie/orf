@@ -1,13 +1,11 @@
 type feature = int
 
-module IntMap = BatMap.Int
+type 'a t = (feature, 'a) Hashtbl.t
 
-type 'a t = 'a IntMap.t
+let iter f vec = Hashtbl.iter f vec
 
-let iter = IntMap.iter
+let zero () = Hashtbl.create 11
 
-let zero = IntMap.empty
+let get ft vec = try Hashtbl.find vec ft with Not_found -> 0
 
-let get f vec = IntMap.find_default 0 f vec
-
-let set = IntMap.add
+let set ft coeff vec = Hashtbl.replace vec ft coeff

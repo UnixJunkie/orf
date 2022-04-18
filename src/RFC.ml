@@ -398,7 +398,7 @@ let predict_OOB rng forest train =
   Utls.ht_iteri (fun i _oob_idx (truth, preds') ->
       let preds =
         let pred_labels = A.of_list preds' in
-        A.map (fun label -> (Feature_vector.zero, label)) pred_labels in
+        A.map (fun label -> (Feature_vector.zero (), label)) pred_labels in
       A.unsafe_set truth_preds i (truth, majority_class rng preds)
     ) oob_idx2preds;
   truth_preds

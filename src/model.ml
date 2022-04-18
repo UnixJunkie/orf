@@ -44,7 +44,7 @@ let train_test_NxCV nprocs train_fun test_fun nfolds training_set =
 (* Orf.RFR needs a samples array *)
 let samples_array_of_mols_list mols =
   let n = L.length mols in
-  let dummy = (Feature_vector.zero, 0.0) in
+  let dummy = (Feature_vector.zero (), 0.0) in
   if n = 0 then
     let () = Log.warn "Model.samples_array_of_mols_list: no mols" in
     A.make 0 dummy
