@@ -9,14 +9,10 @@ module A = BatArray
 module Fn = Filename
 module Ht = BatHashtbl
 module IS = BatSet.Int
-module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
 module LO = Line_oriented
 module Log = Dolog.Log
-
-(* sparse vector of integer features *)
-type features = int IntMap.t
 
 type filename = string
 

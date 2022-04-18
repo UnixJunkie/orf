@@ -6,14 +6,13 @@
 (* Random Forests Regressor *)
 
 module A = BatArray
-module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
 module Log = Dolog.Log
 module RNG = Random.State
 module Ht = BatHashtbl
 
-type features = int IntMap.t
+type features = int Feature_vector.t
 type dep_var = float
 
 type sample = features (* X *) *
@@ -181,7 +180,7 @@ let tree_predict tree (features, _dep_var) =
   let rec loop = function
     | Leaf dep_var -> dep_var
     | Node (lhs, feature, threshold, rhs) ->
-      let value = IntMap.find_default 0 feature features in
+      let value = Feature_vector.get feature features in
       if value <= threshold then
         loop lhs
       else

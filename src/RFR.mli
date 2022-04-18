@@ -5,9 +5,7 @@
 
 (* Random Forests Regressor *)
 
-module IntMap = BatMap.Int
-
-type features = int IntMap.t
+type features = int Feature_vector.t
 type dep_var = float
 
 type sample = features (* X *) *

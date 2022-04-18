@@ -2,7 +2,7 @@
 (library
  (name orf)
  (public_name orf)
- (modules RFC RFR utls)
+ (modules RFC RFR feature_vector utls)
  (private_modules utls)
  (libraries batteries cpm dolog parany line_oriented))
 
