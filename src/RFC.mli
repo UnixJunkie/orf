@@ -1,8 +1,7 @@
 
-module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 
-type features = int IntMap.t
+type features = int Feature_vector.t
 type class_label = int
 
 type sample = features (* X *) *
@@ -78,10 +77,10 @@ val restore: filename -> forest
 (** The following are needed to implement RFR *)
 
 val collect_non_constant_features:
-  (int IntMap.t * 'a) array -> (int * IntSet.t) list
+  (int Feature_vector.t * 'a) array -> (int * IntSet.t) list
 
-val partition_samples: int -> int -> (int IntMap.t * 'a) array ->
-  (int IntMap.t * 'a) array * (int IntMap.t * 'a) array
+val partition_samples: int -> int -> (int Feature_vector.t * 'a) array ->
+  (int Feature_vector.t * 'a) array * (int Feature_vector.t * 'a) array
 
 val cost_function: ('a array -> float) -> 'a array -> 'a array -> float
 

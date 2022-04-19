@@ -5,22 +5,24 @@
 
 module A = BatArray
 module CLI = Minicli.CLI
-module IntMap = BatMap.Int
 module L = BatList
 module LO = Line_oriented
 module Log = Dolog.Log
 module RFC = Orf.RFC
 module RFR = Orf.RFR
+module Feature_vector = Orf.Feature_vector
 module S = BatString
 
 open Printf
 
 let features_of_str_tokens toks =
-  L.fold_left (fun acc tok_str ->
+  let vec = Feature_vector.zero () in
+  L.iter (fun tok_str ->
       Scanf.sscanf tok_str "%d:%d" (fun k v ->
-          IntMap.add k v acc
-        )
-    ) IntMap.empty toks
+          Feature_vector.set k v vec
+      )
+    ) toks ;
+  vec
 
 let sample_of_csv_line l =
   let tokens = S.split_on_char ' ' l in

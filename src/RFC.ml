@@ -7,7 +7,6 @@
 
 module A = BatArray
 module Ht = BatHashtbl
-module IntMap = BatMap.Int
 module IntSet = BatSet.Int
 module L = BatList
 module Log = Dolog.Log
@@ -15,7 +14,7 @@ module RNG = BatRandom.State
 
 open Printf
 
-type features = int IntMap.t
+type features = int Feature_vector.t
 type class_label = int
 
 type sample = features (* X *) *
@@ -30,11 +29,11 @@ type metric = Gini (* default *)
             | Shannon (* TODO; WARN: check min value is still 0.0 *)
             | MCC (* TODO; WARN: check min value is still 0.0 *)
 
-(* a feature with non constant value allows to discriminate samples *)
+(* A feature with non constant value allows to discriminate samples *)
 let collect_non_constant_features samples =
   let feat_vals = Ht.create 11 in
   A.iter (fun (features, _class_label) ->
-      IntMap.iter (fun feature value ->
+      Feature_vector.iter (fun feature value ->
           try
             let prev_values = Ht.find feat_vals feature in
             Ht.replace feat_vals feature (IntSet.add value prev_values)
@@ -51,7 +50,7 @@ let collect_non_constant_features samples =
     ) feat_vals []
 
 let feat_get feat features =
-  IntMap.find_default 0 feat features
+  Feature_vector.get feat features
 
 (* split a node *)
 (* FBR: maybe this can be accelerated:
@@ -64,38 +63,38 @@ let partition_samples feature threshold samples =
       value <= threshold
     ) samples
 
-let _partition_samples_index index feature threshold sample_indexes =
-  (* sample indexes with feat's val <= threshold *)
-  let le_set = IntMap.find threshold (IntMap.find feature index) in
-  A.partition (fun i ->
-      IntSet.mem i le_set
-    ) sample_indexes
+(* let _partition_samples_index index feature threshold sample_indexes =
+ *   (\* sample indexes with feat's val <= threshold *\)
+ *   let le_set = Feature_vector.find threshold (Feature_vector.find feature index) in
+ *   A.partition (fun i ->
+ *       IntSet.mem i le_set
+ *     ) sample_indexes *)
 
 (* for each (feat, threshold) pair, record the set of samples
    (just their indexes in fact) which have feat_val <= threshold *)
-let _index_samples samples =
-  let all_sample_indexes = (* [0..n-1] *)
-    let n = A.length samples in
-    IntSet.of_array (A.init n (fun i -> i)) in
-  let feat_vals = collect_non_constant_features samples in
-  L.fold_left (fun acc1 (feature, values) ->
-      IntMap.add feature
-        (fst
-           (IntSet.fold (fun threshold (acc2, rem_samples) ->
-                let left, right =
-                  IntSet.partition (fun i ->
-                      let features = fst samples.(i) in
-                      let value = feat_get feature features in
-                      value <= threshold
-                    ) rem_samples in
-                (* Log.info "feat: %d val: %d left: %d right: %d"
-                 *   feature threshold
-                 *   (IntSet.cardinal left) (IntSet.cardinal right); *)
-                (IntMap.add threshold left acc2, right)
-              ) values (IntMap.empty, all_sample_indexes)
-           )
-        ) acc1
-    ) IntMap.empty feat_vals
+(* let _index_samples samples =
+ *   let all_sample_indexes = (\* [0..n-1] *\)
+ *     let n = A.length samples in
+ *     IntSet.of_array (A.init n (fun i -> i)) in
+ *   let feat_vals = collect_non_constant_features samples in
+ *   L.fold_left (fun acc1 (feature, values) ->
+ *       Feature_vector.add feature
+ *         (fst
+ *            (IntSet.fold (fun threshold (acc2, rem_samples) ->
+ *                 let left, right =
+ *                   IntSet.partition (fun i ->
+ *                       let features = fst samples.(i) in
+ *                       let value = feat_get feature features in
+ *                       value <= threshold
+ *                     ) rem_samples in
+ *                 (\* Log.info "feat: %d val: %d left: %d right: %d"
+ *                  *   feature threshold
+ *                  *   (IntSet.cardinal left) (IntSet.cardinal right); *\)
+ *                 (Feature_vector.add threshold left acc2, right)
+ *               ) values (Feature_vector.empty, all_sample_indexes)
+ *            )
+ *         ) acc1
+ *     ) Feature_vector.empty feat_vals *)
 
 (* how many times we see each class label *)
 let class_count_samples samples =
@@ -399,7 +398,7 @@ let predict_OOB rng forest train =
   Utls.ht_iteri (fun i _oob_idx (truth, preds') ->
       let preds =
         let pred_labels = A.of_list preds' in
-        A.map (fun label -> (IntMap.empty, label)) pred_labels in
+        A.map (fun label -> (Feature_vector.zero (), label)) pred_labels in
       A.unsafe_set truth_preds i (truth, majority_class rng preds)
     ) oob_idx2preds;
   truth_preds

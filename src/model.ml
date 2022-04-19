@@ -10,12 +10,12 @@ module Buff = Buffer
 module CLI = Minicli.CLI
 module Fn = Filename
 module Fp = Molenc.Fingerprint
-module IntMap = BatMap.Int
 module L = BatList
 module LO = Line_oriented
 module Log = Dolog.Log
 module Mol = Molenc.FpMol
 module RFR = Orf.RFR
+module Feature_vector = Orf.Feature_vector
 module Stats = Cpm.RegrStats
 
 type model_file_mode = Save of string
@@ -44,7 +44,7 @@ let train_test_NxCV nprocs train_fun test_fun nfolds training_set =
 (* Orf.RFR needs a samples array *)
 let samples_array_of_mols_list mols =
   let n = L.length mols in
-  let dummy = (IntMap.empty, 0.0) in
+  let dummy = (Feature_vector.zero (), 0.0) in
   if n = 0 then
     let () = Log.warn "Model.samples_array_of_mols_list: no mols" in
     A.make 0 dummy
