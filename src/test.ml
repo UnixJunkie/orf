@@ -10,17 +10,17 @@ module LO = Line_oriented
 module Log = Dolog.Log
 module RFC = Orf.RFC
 module RFR = Orf.RFR
-module Feature_vector = Orf.Feature_vector
+module Feat_vect = Orf.Feature_vector
 module S = BatString
 
 open Printf
 
 let features_of_str_tokens toks =
-  let vec = Feature_vector.zero () in
+  let vec = Feat_vect.zero () in
   L.iter (fun tok_str ->
       Scanf.sscanf tok_str "%d:%d" (fun k v ->
-          Feature_vector.set k v vec
-      )
+          Feat_vect.set k v vec
+        )
     ) toks ;
   vec
 
