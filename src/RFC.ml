@@ -161,16 +161,14 @@ let fold_partitions f list acc =
     | [x, bucket] ->
       let suffix = bucket in
       let acc = f x prefix suffix acc in
-      acc, suffix
+      (acc, suffix)
     | (x, bucket) :: tl ->
       let acc, suffix = loop f tl (List.rev_append bucket prefix) acc in
       let suffix = List.rev_append bucket suffix in
       let acc = f x prefix suffix acc in
-      acc, suffix
+      (acc, suffix)
   in
-  let acc, _ =
-    loop f list [] acc
-  in acc
+  fst (loop f list [] acc)
 
 (* maybe this is called the "Classification And Regression Tree" (CART)
    algorithm in the litterature *)
@@ -204,24 +202,25 @@ let tree_grow (rng: Random.State.t) (* seeded RNG *)
         let table = Hashtbl.create 11 in
         let split_costs =
           L.fold (fun acc (feature, values) ->
-              Hashtbl.clear table ;
+              Hashtbl.clear table;
               A.iter (fun ((f, _cl) as sample) ->
                   Hashtbl.add table (feat_get feature f) sample
-                ) samples ;
-              let buckets : (int * sample list) list =
-                IntSet.to_seq values
-                |> Seq.map (fun value ->
-                    let samples = Hashtbl.find_all table value in
-                    (value, samples))
-                |> List.of_seq
+                ) samples;
+              let buckets: (int * sample list) list =
+                List.of_seq
+                  (Seq.map (fun value ->
+                       let samples = Hashtbl.find_all table value in
+                       (value, samples)
+                     ) (IntSet.to_seq values)
+                  )
               in
               fold_partitions (fun value left right acc ->
-                let left = Array.of_list left in
-                let right = Array.of_list right in
-                let cost = cost_function metric left right in
-                (cost, feature, value, (left, right)) :: acc
-              ) buckets acc
-          ) [] split_candidates in
+                  let left = Array.of_list left in
+                  let right = Array.of_list right in
+                  let cost = cost_function metric left right in
+                  (cost, feature, value, (left, right)) :: acc
+                ) buckets acc
+            ) [] split_candidates in
         (* choose one split minimizing cost *)
         let cost, feature, threshold, (left, right) =
           choose_min_cost rng split_costs in
