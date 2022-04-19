@@ -8,14 +8,15 @@ open Printf
 module A = BatArray
 module Buff = Buffer
 module CLI = Minicli.CLI
+module Feat_vect = Orf.Feature_vector
 module Fn = Filename
 module Fp = Molenc.Fingerprint
+module IntMap = BatMap.Int
 module L = BatList
 module LO = Line_oriented
 module Log = Dolog.Log
 module Mol = Molenc.FpMol
 module RFR = Orf.RFR
-module Feature_vector = Orf.Feature_vector
 module Stats = Cpm.RegrStats
 
 type model_file_mode = Save of string
@@ -44,7 +45,7 @@ let train_test_NxCV nprocs train_fun test_fun nfolds training_set =
 (* Orf.RFR needs a samples array *)
 let samples_array_of_mols_list mols =
   let n = L.length mols in
-  let dummy = (Feature_vector.zero (), 0.0) in
+  let dummy = (Feat_vect.zero (), 0.0) in
   if n = 0 then
     let () = Log.warn "Model.samples_array_of_mols_list: no mols" in
     A.make 0 dummy
@@ -52,8 +53,12 @@ let samples_array_of_mols_list mols =
     let res = A.make n dummy in
     L.iteri (fun i mol ->
         let activity = Mol.get_value mol in
-        let features = Fp.key_values (Mol.get_fp mol) in
-        res.(i) <- (features, activity)
+        let vec = Feat_vect.zero () in
+        let key_values = Fp.key_values (Mol.get_fp mol) in
+        IntMap.iter (fun k v ->
+            Feat_vect.set k v vec
+          ) key_values;
+        res.(i) <- (vec, activity)
       ) mols;
     res
 
