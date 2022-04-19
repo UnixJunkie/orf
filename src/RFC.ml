@@ -63,39 +63,6 @@ let partition_samples feature threshold samples =
       value <= threshold
     ) samples
 
-(* let _partition_samples_index index feature threshold sample_indexes =
- *   (\* sample indexes with feat's val <= threshold *\)
- *   let le_set = Feature_vector.find threshold (Feature_vector.find feature index) in
- *   A.partition (fun i ->
- *       IntSet.mem i le_set
- *     ) sample_indexes *)
-
-(* for each (feat, threshold) pair, record the set of samples
-   (just their indexes in fact) which have feat_val <= threshold *)
-(* let _index_samples samples =
- *   let all_sample_indexes = (\* [0..n-1] *\)
- *     let n = A.length samples in
- *     IntSet.of_array (A.init n (fun i -> i)) in
- *   let feat_vals = collect_non_constant_features samples in
- *   L.fold_left (fun acc1 (feature, values) ->
- *       Feature_vector.add feature
- *         (fst
- *            (IntSet.fold (fun threshold (acc2, rem_samples) ->
- *                 let left, right =
- *                   IntSet.partition (fun i ->
- *                       let features = fst samples.(i) in
- *                       let value = feat_get feature features in
- *                       value <= threshold
- *                     ) rem_samples in
- *                 (\* Log.info "feat: %d val: %d left: %d right: %d"
- *                  *   feature threshold
- *                  *   (IntSet.cardinal left) (IntSet.cardinal right); *\)
- *                 (Feature_vector.add threshold left acc2, right)
- *               ) values (Feature_vector.empty, all_sample_indexes)
- *            )
- *         ) acc1
- *     ) Feature_vector.empty feat_vals *)
-
 (* how many times we see each class label *)
 let class_count_samples samples =
   let ht = Ht.create 11 in
