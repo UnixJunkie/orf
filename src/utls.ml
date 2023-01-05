@@ -385,7 +385,7 @@ let array_bootstrap_sample rng nb_samples a =
    but also return the set of Out Of Bag (unused) sample indexes *)
 let array_bootstrap_sample_OOB rng nb_samples a =
   let n = Array.length a in
-  let flags = A.create n '0' in
+  let flags = A.make n '0' in
   let bootstrap =
     A.init nb_samples (fun _ ->
         let rand = Random.State.int rng n in
@@ -402,7 +402,7 @@ let array_bootstrap_sample_OOB rng nb_samples a =
 (* only return bootstrap and OOB element _indexes_ *)
 let array_bootstrapi_sample_OOB rng nb_samples a =
   let n = Array.length a in
-  let flags = A.create n '0' in
+  let flags = A.make n '0' in
   let bootstrap =
     A.init nb_samples (fun _ ->
         let rand = Random.State.int rng n in

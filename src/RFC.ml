@@ -247,7 +247,7 @@ let rand_max_bound = 1073741823 (* 2^30 - 1 *)
 (* array input order is preserved (REQUIRED by predict_many) *)
 let array_parmap ncores f a init =
   let n = A.length a in
-  let res = A.create n init in
+  let res = A.make n init in
   Parany.run ncores
     ~demux:(
       let in_count = ref 0 in
@@ -387,7 +387,7 @@ let predict_OOB rng forest train =
             Ht.add oob_idx2preds oob_idx (truth, [pred])
         )
     ) forest;
-  let truth_preds = A.create (Ht.length oob_idx2preds) (0, 0) in
+  let truth_preds = A.make (Ht.length oob_idx2preds) (0, 0) in
   Utls.ht_iteri (fun i _oob_idx (truth, preds') ->
       let preds =
         let pred_labels = A.of_list preds' in

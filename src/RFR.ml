@@ -217,7 +217,7 @@ let predict_OOB forest train =
             Ht.add oob_idx2preds oob_idx (truth, [pred])
         )
     ) forest;
-  let truth_preds = A.create (Ht.length oob_idx2preds) (0.0, 0.0) in
+  let truth_preds = A.make (Ht.length oob_idx2preds) (0.0, 0.0) in
   Utls.ht_iteri (fun i _oob_idx (truth, preds) ->
       A.unsafe_set truth_preds i (truth, L.favg preds)
     ) oob_idx2preds;
